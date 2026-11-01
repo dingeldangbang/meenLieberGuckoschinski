@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buchmaschine – KDP-Studio für druckfertige Bücher</title>
+    <meta name="description" content="Nische finden, Buch aufbauen, druckfertige PDFs für Amazon KDP exportieren – lokal, ohne Konto, ohne Cloudkosten." />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f0c987'/%3E%3Cpath d='M8 9h8a5 5 0 0 1 5 5v9a4 4 0 0 0-4-4H8z' fill='%23231c14'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">B</span>
+          <div>
+            <h1>Buchmaschine</h1>
+            <p>KDP-Studio · lokal · ohne Konto</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="pill" id="status-pill" role="status">bereit</span>
+          <button class="btn ghost" id="btn-projects" type="button">Projekte</button>
+          <button class="btn ghost" id="btn-help" type="button">Hilfe</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="workspace" aria-label="Buch konfigurieren">
+          <nav class="steps" aria-label="Schritte">
+            <button class="step is-active" data-step="1" type="button"><span>1</span>Nische</button>
+            <button class="step" data-step="2" type="button"><span>2</span>Buch</button>
+            <button class="step" data-step="3" type="button"><span>3</span>Inhalt</button>
+            <button class="step" data-step="4" type="button"><span>4</span>Cover</button>
+            <button class="step" data-step="5" type="button"><span>5</span>Export</button>
+          </nav>
+
+          <!-- Schritt 1: Nische -->
+          <div class="panel" data-panel="1">
+            <div class="panel-head">
+              <h2>Nische wählen</h2>
+              <p>Startpunkte für den deutschen Markt – Suchbegriffe, Preisanker und passender Buch-Typ sind schon gesetzt.</p>
+            </div>
+            <div class="niche-grid" id="niche-grid"></div>
+
+            <div class="card">
+              <h3>Keyword-Werkstatt</h3>
+              <p class="muted">Tippe einen Nischen-Stamm ein. Du bekommst lange Suchphrasen und kannst bis zu 7 in die KDP-Slots übernehmen.</p>
+              <div class="row">
+                <input id="kw-seed" type="text" placeholder="z. B. rätselbuch für senioren" autocomplete="off" />
+                <button class="btn" id="kw-build" type="button">Vorschläge</button>
+              </div>
+              <div id="kw-ideas" class="chips" aria-live="polite"></div>
+              <h4 class="sub">Ausgewählt <span id="kw-count" class="count">0 / 7</span></h4>
+              <div id="kw-selected" class="chips chips-selected"></div>
+            </div>
+          </div>
+
+          <!-- Schritt 2: Buch -->
+          <div class="panel is-hidden" data-panel="2">
+            <div class="panel-head">
+              <h2>Buch festlegen</h2>
+              <p>Format und Seitenzahl bestimmen Rückenbreite, Druckkosten und Tantieme. Alles wird sofort mitgerechnet.</p>
+            </div>
+            <div class="card grid-2">
+              <label class="field span-2">
+                <span>Titel</span>
+                <input id="f-title" type="text" maxlength="200" />
+              </label>
+              <label class="field span-2">
+                <span>Untertitel <em>keyword-optimiert</em></span>
+                <input id="f-subtitle" type="text" maxlength="200" />
+              </label>
+              <label class="field">
+                <span>Autor / Pseudonym</span>
+                <input id="f-author" type="text" maxlength="100" />
+              </label>
+              <label class="field">
+                <span>Buch-Typ</span>
+                <select id="f-generator"></select>
+              </label>
+              <label class="field span-2">
+                <span>Beschreibung <em>Rückseitentext, max. 4000 Zeichen</em></span>
+                <textarea id="f-description" rows="4" maxlength="4000"></textarea>
+              </label>
+              <label class="field">
+                <span>Format</span>
+                <select id="f-trim"></select>
+              </label>
+              <label class="field">
+                <span>Papier</span>
+                <select id="f-paper">
+                  <option value="white">Weiß</option>
+                  <option value="cream">Creme</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Seitenzahl <em>gerade, 24–828</em></span>
+                <input id="f-pages" type="number" min="24" max="828" step="2" />
+              </label>
+              <label class="field">
+                <span>Verkaufspreis in € <em>Taschenbuch</em></span>
+                <input id="f-price" type="number" min="0.99" max="250" step="0.5" />
+              </label>
+              <label class="field span-2">
+                <span>Seed <em>gleicher Seed = gleiches Buch</em></span>
+                <div class="row">
+                  <input id="f-seed" type="text" maxlength="64" />
+                  <button class="btn ghost" id="f-seed-random" type="button">neu würfeln</button>
+                </div>
+              </label>
+            </div>
+
+            <div class="card">
+              <h3>Kalkulation</h3>
+              <div class="metrics" id="calc-metrics"></div>
+              <div class="table-wrap">
+                <table class="table" id="price-table"></table>
+              </div>
+              <p class="fineprint">Rechenmodell für Amazon.de, Schwarzweißdruck (0,60 € Grundpreis + 0,012 €/Seite, 60 % Tantieme). Verbindlich ist die KDP-Vorschau.</p>
+            </div>
+          </div>
+
+          <!-- Schritt 3: Inhalt -->
+          <div class="panel is-hidden" data-panel="3">
+            <div class="panel-head">
+              <h2>Inhalt erzeugen</h2>
+              <p>Rätsel, Journale und Übungsseiten entstehen rechnerisch im Server – ohne KI, ohne Token, ohne Wartezeit.</p>
+            </div>
+            <div class="card grid-2">
+              <label class="field">
+                <span>Schwierigkeit</span>
+                <select id="f-difficulty">
+                  <option value="easy">leicht</option>
+                  <option value="medium">mittel</option>
+                  <option value="hard">schwer</option>
+                </select>
+              </label>
+              <label class="field" id="words-wrap">
+                <span>Wörter pro Rätsel</span>
+                <input id="f-words" type="number" min="6" max="20" />
+              </label>
+              <div class="field span-2" id="wordsets-wrap">
+                <span>Wort-Themen</span>
+                <div class="chips" id="wordsets"></div>
+              </div>
+              <label class="field" id="chapters-wrap">
+                <span>Kapitel (Übungsbuch)</span>
+                <input id="f-chapters" type="number" min="1" max="20" />
+              </label>
+              <label class="field" id="notebook-wrap">
+                <span>Seitenraster (Notizbuch)</span>
+                <select id="f-notebook">
+                  <option value="lined">liniert</option>
+                  <option value="dotted">punktiert</option>
+                  <option value="grid">kariert</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h3>Seitenplan</h3>
+                <button class="btn ghost small" id="btn-refresh" type="button">neu berechnen</button>
+              </div>
+              <div id="plan-summary" class="metrics"></div>
+              <ol class="plan-list" id="plan-list"></ol>
+            </div>
+          </div>
+
+          <!-- Schritt 4: Cover -->
+          <div class="panel is-hidden" data-panel="4">
+            <div class="panel-head">
+              <h2>Cover gestalten</h2>
+              <p>Farbwelt, Rücken und Barcode-Freizone – die Maße kommen aus dem Rückenrechner, nicht aus dem Bauch.</p>
+            </div>
+            <div class="card">
+              <div class="field">
+                <span>Farbwelt</span>
+                <div class="swatches" id="cover-styles"></div>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="f-guides" />
+                <span>Hilfslinien im PDF (Beschnitt, Falz, Sicherheitsabstand, Barcode)</span>
+              </label>
+              <div class="cover-big" id="cover-big"></div>
+              <div class="metrics" id="cover-metrics"></div>
+            </div>
+          </div>
+
+          <!-- Schritt 5: Export -->
+          <div class="panel is-hidden" data-panel="5">
+            <div class="panel-head">
+              <h2>Export &amp; Veröffentlichung</h2>
+              <p>Zwei PDFs, eine Metadaten-Datei, eine Checkliste. Danach nur noch im KDP-Dashboard hochladen.</p>
+            </div>
+            <div class="card">
+              <h3>Druckdateien</h3>
+              <div class="export-grid">
+                <button class="export-tile" data-export="manuscript" type="button">
+                  <strong>Buchblock</strong>
+                  <span>PDF · trimgenau, gespiegelte Ränder</span>
+                </button>
+                <button class="export-tile" data-export="cover" type="button">
+                  <strong>Cover</strong>
+                  <span>PDF · Vollumschlag inkl. Beschnitt</span>
+                </button>
+                <button class="export-tile" data-export="metadata" type="button">
+                  <strong>Metadaten</strong>
+                  <span>JSON + Copy-Paste-Text für KDP</span>
+                </button>
+                <button class="export-tile" data-export="save" type="button">
+                  <strong>Projekt speichern</strong>
+                  <span>lokal in data/projects.json</span>
+                </button>
+              </div>
+              <p class="fineprint" id="export-note">Noch nichts exportiert.</p>
+            </div>
+
+            <div class="card">
+              <h3>KDP-Metadaten</h3>
+              <div id="meta-summary"></div>
+              <div class="row">
+                <button class="btn" id="btn-copy" type="button">Copy-Paste-Text kopieren</button>
+              </div>
+              <pre class="copybox" id="copybox" aria-label="Copy-Paste-Text">…</pre>
+            </div>
+
+            <div class="card">
+              <h3>Veröffentlichungs-Checkliste</h3>
+              <ol class="checklist">
+                <li><label><input type="checkbox" /> Titel, Untertitel und Autor im KDP-Dashboard exakt übernehmen</label></li>
+                <li><label><input type="checkbox" /> Die 7 Keyword-Phrasen eintragen – keine Wiederholungen aus dem Titel</label></li>
+                <li><label><input type="checkbox" /> Zwei passende Kategorien wählen (BISAC-Vorschläge siehe Metadaten)</label></li>
+                <li><label><input type="checkbox" /> Buchblock-PDF hochladen, Druckvorschau prüfen (keine Warnungen)</label></li>
+                <li><label><input type="checkbox" /> Cover-PDF als „fertige Datei“ hochladen, Rückenbreite muss passen</label></li>
+                <li><label><input type="checkbox" /> Preis setzen: mindestens der angezeigte Mindestpreis</label></li>
+                <li><label><input type="checkbox" /> Kostenlose KDP-ISBN zuweisen, danach „Veröffentlichen“</label></li>
+                <li><label><input type="checkbox" /> Nach Freigabe: Rezensionen der ersten 10 Käufe beobachten und Auflage 2 planen</label></li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <aside class="inspector" aria-label="Live-Vorschau">
+          <div class="inspector-head">
+            <div class="tabs" role="tablist">
+              <button class="tab is-active" data-tab="cover" role="tab" type="button">Cover</button>
+              <button class="tab" data-tab="page" role="tab" type="button">Seite</button>
+              <button class="tab" data-tab="numbers" role="tab" type="button">Zahlen</button>
+            </div>
+            <span class="pill subtle" id="preview-state">Vorschau</span>
+          </div>
+          <div class="inspector-body">
+            <div class="tabpane" data-pane="cover">
+              <div id="cover-preview" class="cover-preview"></div>
+              <div class="legend">
+                <span><i class="sw sw-bleed"></i>Beschnitt</span>
+                <span><i class="sw sw-fold"></i>Falz</span>
+                <span><i class="sw sw-safe"></i>Sicherheitsabstand</span>
+                <span><i class="sw sw-barcode"></i>Barcode</span>
+              </div>
+            </div>
+            <div class="tabpane is-hidden" data-pane="page">
+              <div id="page-preview" class="page-preview"></div>
+              <p class="fineprint" id="page-caption">Erste Rätselseite des Buches.</p>
+            </div>
+            <div class="tabpane is-hidden" data-pane="numbers">
+              <div class="metrics stacked" id="numbers-panel"></div>
+              <div class="revenue" id="revenue-panel"></div>
+            </div>
+          </div>
+          <div class="inspector-foot">
+            <button class="btn primary" id="btn-download-all" type="button">Beide PDFs herunterladen</button>
+            <p class="fineprint" id="inspector-note">Alles wird lokal berechnet – keine Daten verlassen deinen Rechner.</p>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <dialog id="dlg-projects" class="dialog">
+      <div class="dialog-head">
+        <h2>Projekte</h2>
+        <button class="btn ghost small" data-close type="button">schließen</button>
+      </div>
+      <div id="projects-list" class="projects"></div>
+    </dialog>
+
+    <dialog id="dlg-help" class="dialog">
+      <div class="dialog-head">
+        <h2>So funktioniert die Buchmaschine</h2>
+        <button class="btn ghost small" data-close type="button">schließen</button>
+      </div>
+      <div class="help">
+        <h3>Was hier automatisch passiert</h3>
+        <ul>
+          <li>Nischen-Pakete mit Suchbegriffen, Preisanker und Buch-Typ</li>
+          <li>Rätsel, Wortsuche, Labyrinthe, Journale und Übungsseiten – rechnerisch erzeugt, mit garantiert eindeutiger Lösung</li>
+          <li>Rückenbreite, Beschnitt, Barcode-Zone und Innenränder nach KDP-Vorgabe</li>
+          <li>Druckkosten, Mindestpreis und Tantieme je Verkauf</li>
+          <li>Buchblock- und Cover-PDF, Metadaten und Checkliste</li>
+        </ul>
+        <h3>Was hier bewusst nicht passiert</h3>
+        <ul>
+          <li>Keine KI-Texte: Ratgeber-Fließtext schreibt weiterhin ein Mensch – die App liefert Struktur und Übungen.</li>
+          <li>Kein automatischer Upload zu Amazon: Veröffentlichen bleibt ein bewusster Klick.</li>
+          <li>Keine erfundenen Marktdaten: Nachfrage- und Wettbewerbs-Werte sind Einschätzungen, keine Live-Zahlen.</li>
+          <li>Kein Tracking, keine Cloud, keine API-Keys.</li>
+        </ul>
+        <h3>Ablauf in fünf Schritten</h3>
+        <ol>
+          <li>Nische wählen und Keywords sammeln</li>
+          <li>Titel, Format, Seitenzahl und Preis festlegen</li>
+          <li>Inhalt erzeugen und Seitenplan prüfen</li>
+          <li>Cover-Farbwelt wählen</li>
+          <li>PDFs exportieren und im KDP-Dashboard hochladen</li>
+        </ol>
+      </div>
+    </dialog>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

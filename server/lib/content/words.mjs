@@ -1,0 +1,62 @@
+/** Deutsche Wortlisten für Wortsuchrätsel - thematisch sortiert. */
+export const WORDSETS = {
+  tiere: {
+    label: 'Tiere',
+    words: ['EICHHÖRNCHEN', 'SCHMETTERLING', 'IGEL', 'FUCHS', 'DACHS', 'REH', 'HIRSCH', 'EULE', 'SPERLING', 'MEISE', 'FROSCH', 'KRÖTE', 'MOLCH', 'LIBELLE', 'BIENE', 'HUMMEL', 'AMMER', 'SPECHT', 'ELSTER', 'KRÄHE', 'MARDER', 'WIESEL', 'OTTER', 'FELDMAUS', 'HASELMAUS', 'WILDSCHWEIN', 'REHBOCK', 'KÄUZCHEN', 'FISCHREIHER', 'ENTE', 'GÄNS', 'STORCH'],
+  },
+  garten: {
+    label: 'Garten',
+    words: ['GIESSKANNE', 'HACKE', 'SPATEN', 'RECHEN', 'BLUMENTOPF', 'TOMATEN', 'GURKE', 'KÜRBIS', 'SALAT', 'RADIESCHEN', 'KAROTTEN', 'BOHNEN', 'ERBSEN', 'ZWIEBEL', 'KNOBLAUCH', 'PETERSILIE', 'SCHNITTLAUCH', 'THYMIAN', 'ROSMARIN', 'LAVENDEL', 'TULPE', 'NARZISSE', 'HYAZINTHE', 'STIEFMÜTTERCHEN', 'RINGELBLUME', 'SONNENBLUME', 'HORTENSIE', 'KIRSCHBAUM', 'HECKENSCHEERE', 'KOMPOST', 'REGENWURM', 'SCHNECKE'],
+  },
+  kueche: {
+    label: 'Küche',
+    words: ['KOCHLÖFFEL', 'SUPPENTOPF', 'BRATPFANNE', 'SCHNEIDEBRETT', 'MESSER', 'GABEL', 'LOFFEL', 'TEESIEB', 'KASSEROLLE', 'BACKOFEN', 'HERDPLATTE', 'MIXER', 'QUIRL', 'TEIGROLLE', 'NUDELHOLZ', 'SIEB', 'REIBE', 'DOSE', 'GEWÜRZREGAL', 'SALZMÜHLE', 'PFEFFERSTREUER', 'MESSBECHER', 'KUCHENFORM', 'SPÜLBECKEN', 'GESCHIRRTUCH', 'TOPFHANDSCHUH', 'SCHÖPFKELLE', 'SPAGHETTI', 'RISOTTO', 'PANCAKES'],
+  },
+  berufe: {
+    label: 'Berufe',
+    words: ['TISCHLER', 'MALER', 'DACHDECKER', 'MAURER', 'ELEKTRIKER', 'KLEMPNER', 'BÄCKER', 'METZGER', 'KOCH', 'KELLNER', 'FRISEUR', 'APOTHEKER', 'PFLEGER', 'ARZT', 'LEHRER', 'ERZIEHER', 'BÜCHHALTER', 'ANWALT', 'ARCHITEKT', 'INGENIEUR', 'PROGRAMMIERER', 'GÄRTNER', 'LANDWIRT', 'FÖRSTER', 'BUSFAHRER', 'LOKOMOTIVFÜHRER', 'PILOT', 'SEEMANN', 'ZAHNARZT', 'PHYSIOTHERAPEUT'],
+  },
+  natur: {
+    label: 'Natur & Wetter',
+    words: ['GEWITTER', 'REGENBOGEN', 'SCHNEEFLOCKE', 'HAGEL', 'NEBEL', 'SONNENSCHEIN', 'WOLKE', 'STURM', 'BLITZ', 'DONNER', 'TAUFROST', 'WALDBODEN', 'MOOS', 'FARN', 'BACH', 'QUELLE', 'WASSERFALL', 'FELSEN', 'SCHLUCHT', 'HÜGEL', 'WIESE', 'AUE', 'DÜNE', 'KLIFFE', 'EBBE', 'FLUT', 'NORDLICHT', 'MORGENTAU', 'ABENDROT', 'STERNHIMMEL'],
+  },
+  reisen: {
+    label: 'Reisen',
+    words: ['KOFFER', 'RUCKSACK', 'REISEPASS', 'FAHRKARTE', 'FLUGZEUG', 'BAHNHOF', 'GLEIS', 'HOTELZIMMER', 'STRANDKORB', 'LEUCHTTURM', 'ALTSTADT', 'MUSEUM', 'SOUVENIR', 'AUSSICHT', 'WANDERWEG', 'BERGHÜTTE', 'SEENPLATTE', 'INSEL', 'FÄHRE', 'CAMPINGPLATZ', 'ZELT', 'SCHLAFSACK', 'FERIENHAUS', 'KURORT', 'THERME', 'STADTPLAN', 'RUNDFAHRT', 'SOMMERFRISCHE', 'SONNENBRAND', 'KOPFBAHNHOF'],
+  },
+  gefuehle: {
+    label: 'Gefühle',
+    words: ['FREUNDSCHAFT', 'VERTRAUEN', 'GELASSENHEIT', 'NEUGIER', 'MUT', 'ZUFRIEDENHEIT', 'DANKBARKEIT', 'HOFFNUNG', 'HEITERKEIT', 'ZUGEHÖRIGKEIT', 'WERTSCHÄTZUNG', 'LEICHTIGKEIT', 'GEDULD', 'TROST', 'FREUDE', 'STAUNEN', 'RUHE', 'ZUCHT', 'ZWIESPALT', 'WEHMUT', 'NACHDENKEN', 'ZÄRTLICHKEIT', 'AUFMERKSAMKEIT', 'ANTEILNAHME', 'ERLEICHTERUNG', 'VERLÄSSLICHKEIT', 'ENTSCHEIDENHEIT', 'LIEBE', 'STOLZ', 'DEMUT'],
+  },
+  spiele: {
+    label: 'Spiele & Freizeit',
+    words: ['SCHACH', 'DAME', 'MÜHLE', 'BACKGAMMON', 'KARTENSPIEL', 'ROMMÉ', 'SKAT', 'DOBBLE', 'YATZY', 'KNIFFEL', 'PUZZLE', 'MEMORY', 'BINGO', 'WÜRFEL', 'SPIELBRETT', 'FIGUR', 'JOKER', 'ASS', 'KÖNIG', 'DAME', 'BAUER', 'TURM', 'LÄUFER', 'SPRINGER', 'ERGEBNIS', 'PUNKTE', 'RUNDE', 'TURNIER', 'VEREIN', 'MANNSCHAFT'],
+  },
+  fahrzeuge: {
+    label: 'Fahrzeuge',
+    words: ['FAHRRAD', 'MOTORRAD', 'AUTOBAHN', 'LASTWAGEN', 'TRAKTOR', 'STRASSENBAHN', 'LOKOMOTIVE', 'SEGELBOOT', 'MOTORYACHT', 'FLUGHAFEN', 'HUBSCHRAUBER', 'SEILBAHN', 'ROLLER', 'QUAD', 'BUSSE', 'TAXI', 'KREUZFAHRT', 'CONTAINER', 'GLEISBAU', 'RADWEG', 'AMPEL', 'KREISVERKEHR', 'TANKSTELLE', 'GARAGE', 'WERKSTATT', 'ANHÄNGER', 'KUPPLUNG', 'HUPE', 'SPIEGEL', 'BREMSE'],
+  },
+  koerper: {
+    label: 'Körper & Gesundheit',
+    words: ['SCHULTERBLATT', 'ELLBOGEN', 'HANDGELENK', 'FINGERNAGEL', 'KNIEGELENK', 'FUSSBALLEN', 'WIRBELSÄULE', 'SCHLÜSSELBEIN', 'BRUSTBEIN', 'MILZ', 'LEBER', 'NIERE', 'LUNGE', 'MAGEN', 'DARM', 'HERZKAMMER', 'BLUTBAHN', 'SEHNE', 'MUSKEL', 'BANDSCHEIBE', 'HAUTSCHICHT', 'IMMUNSYSTEM', 'STOFFWECHSEL', 'ATMUNG', 'KREISLAUF', 'VERDAUUNG', 'SCHLAF', 'BEWEGUNG', 'ENTSPANNUNG', 'VORSORGE'],
+  },
+};
+
+/** Alle Kategorien als Liste für die UI. */
+export function wordsetList() {
+  return Object.entries(WORDSETS).map(([id, set]) => ({
+    id,
+    label: set.label,
+    count: set.words.length,
+  }));
+}
+
+export function wordsForCategories(categoryIds) {
+  const ids = categoryIds?.length ? categoryIds : Object.keys(WORDSETS);
+  const words = [];
+  for (const id of ids) {
+    const set = WORDSETS[id];
+    if (set) words.push(...set.words.map((w) => w.replace(/\s+/g, '').toUpperCase()));
+  }
+  return [...new Set(words)];
+}
