@@ -781,6 +781,7 @@ async function init() {
       .map(([id, trim]) => `<option value="${id}">${escapeXml(trim.label)}</option>`)
       .join('');
 
+    state.nicheId = state.niches[0].id;
     state.config = baseConfig(state.niches[0]);
     syncFields();
     renderNiches();

@@ -277,7 +277,7 @@ export async function renderCoverPdf(plan, options = {}) {
     const label = `${dims.totalWidthIn} x ${dims.totalHeightIn} Zoll · Ruecken ${dims.spineIn} Zoll · Beschnitt 0,125 Zoll`;
     page.drawText(sanitizeText(label), {
       x: bleed + 6,
-      y: H - 14,
+      y: 6,
       size: 7,
       font: regular,
       color: guide,
