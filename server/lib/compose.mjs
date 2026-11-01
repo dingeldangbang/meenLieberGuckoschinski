@@ -94,22 +94,28 @@ function buildPuzzlePages(config, usable) {
 
 function buildJournalPages(config, usable) {
   const pages = [];
-  let dayIndex = 0;
-  let pageCount = 0;
-  while (pageCount < usable) {
-    const isWeekly = dayIndex > 0 && dayIndex % 7 === 0 && pages.length > 0;
-    if (isWeekly) {
-      const reflection = WEEKLY_REFLECTIONS[(dayIndex / 7 - 1) % WEEKLY_REFLECTIONS.length];
-      pages.push({ type: 'weekly', ...reflection, week: Math.floor(dayIndex / 7) });
-      pageCount += 1;
-      continue;
+  let daysEmitted = 0;
+  let weekIndex = 0;
+
+  while (pages.length < usable) {
+    // Eine Woche = sieben Tagesseiten ...
+    for (let i = 0; i < 7 && pages.length < usable; i += 1) {
+      pages.push({
+        type: 'journalDay',
+        index: daysEmitted + 1,
+        prompt: JOURNAL_PROMPTS[daysEmitted % JOURNAL_PROMPTS.length],
+      });
+      daysEmitted += 1;
     }
-    const prompt = JOURNAL_PROMPTS[dayIndex % JOURNAL_PROMPTS.length];
-    pages.push({ type: 'journalDay', index: dayIndex + 1, prompt });
-    dayIndex += 1;
-    pageCount += 1;
+    // ... danach die Rückblickseite
+    if (pages.length < usable) {
+      weekIndex += 1;
+      const reflection = WEEKLY_REFLECTIONS[(weekIndex - 1) % WEEKLY_REFLECTIONS.length];
+      pages.push({ type: 'weekly', ...reflection, week: weekIndex });
+    }
   }
-  return { pages, entryCount: dayIndex };
+
+  return { pages, entryCount: daysEmitted };
 }
 
 function buildWorkbookPages(config, usable) {

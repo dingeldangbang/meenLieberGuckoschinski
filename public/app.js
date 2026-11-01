@@ -549,6 +549,11 @@ async function runExport(kind) {
       const response = await api(`/api/export/cover.pdf${guides}`, { method: 'POST', body });
       download(`${name}_cover${state.guides ? '_hilfslinien' : ''}.pdf`, await response.blob());
       note.textContent = 'Cover exportiert – inklusive 0,125" Beschnitt und Barcode-Freizone.';
+    } else if (kind === 'ebook') {
+      note.textContent = 'E-Book wird gebaut …';
+      const response = await api('/api/export/ebook.epub', { method: 'POST', body });
+      download(`${name}_kindle.epub`, await response.blob());
+      note.textContent = 'EPUB 3 exportiert – mit Titel, Anleitung, Kapiteln und Inhaltsverzeichnis.';
     } else if (kind === 'metadata') {
       const data = await api('/api/export/metadata.json', { method: 'POST', body });
       state.lastMeta = data.copyPasteText;
@@ -591,6 +596,33 @@ async function downloadBoth() {
   }
 }
 
+async function loadPortfolio(sales = Number($('#portfolio-sales').value) || 10) {
+  const metrics = $('#portfolio-metrics');
+  const table = $('#portfolio-table');
+  try {
+    const data = await api(`/api/dashboard?sales=${encodeURIComponent(sales)}`);
+    const s = data.summary;
+    if (!s.projectCount) {
+      metrics.innerHTML = '<p class="fineprint">Noch keine Projekte gespeichert. „Projekt speichern“ in Schritt 5 legt den ersten Eintrag an.</p>';
+      table.innerHTML = '';
+      $('#portfolio-note').textContent = '';
+      return;
+    }
+    metrics.innerHTML = [
+      metric('Projekte', String(s.projectCount), `${s.totalPages} Seiten insgesamt`),
+      metric('Ø Preis', fmtEur(s.averagePriceEur), `Ø Tantieme ${fmtEur(s.averageRoyaltyEur)}`),
+      metric('Modell / Monat', fmtEur(s.monthlyEurAllEur), `${s.salesPerBook} Verkäufe je Buch`),
+      metric('Modell / Jahr', fmtEur(s.yearlyEurAllEur), 'bei konstanten Verkäufen'),
+    ].join('');
+    table.innerHTML = `<thead><tr><th>Projekt</th><th class="num">Seiten</th><th class="num">Preis</th><th class="num">Tantieme</th><th class="num">Monat</th></tr></thead><tbody>${data.rows
+      .map((row) => `<tr><td>${escapeXml(row.name)}</td><td class="num">${row.pageCount}</td><td class="num">${fmtEur(row.priceEur)}</td><td class="num ${row.belowMinimum ? 'warn' : ''}">${fmtEur(row.royaltyPerSaleEur)}</td><td class="num">${fmtEur(row.monthlyEur)}</td></tr>`)
+      .join('')}</tbody>`;
+    $('#portfolio-note').textContent = [data.pricingHint, ...s.warnings].join(' ');
+  } catch (error) {
+    metrics.innerHTML = `<p class="fineprint">Portfolio nicht ladbar: ${escapeXml(error.message)}</p>`;
+  }
+}
+
 async function loadProjects() {
   const list = $('#projects-list');
   list.innerHTML = '<p class="fineprint">lade …</p>';
@@ -616,6 +648,7 @@ async function loadProjects() {
   } catch (error) {
     list.innerHTML = `<p class="fineprint">Fehler: ${escapeXml(error.message)}</p>`;
   }
+  loadPortfolio();
 }
 
 /* --------------------------------- Wiring -------------------------------- */
@@ -632,12 +665,38 @@ function wire() {
     if (button) selectNiche(button.dataset.niche);
   });
 
+  $('#kw-live').addEventListener('click', async () => {
+    const seed = $('#kw-seed').value.trim();
+    if (seed.length < 2) { $('#kw-seed').focus(); return; }
+    const button = $('#kw-live');
+    const note = $('#kw-source');
+    button.disabled = true;
+    note.textContent = 'Frage die Amazon-Suchleiste ab …';
+    try {
+      const data = await api(`/api/suggest?q=${encodeURIComponent(seed)}&mkt=de`);
+      renderKeywordChips(data.ideas);
+      if (data.live) {
+        note.textContent = `${data.suggestions.length} Live-Vorschläge aus der Amazon-Büchersuche. ${data.note}`;
+        setStatus('live-daten', 'is-good');
+      } else {
+        note.textContent = data.note ?? 'Keine Live-Treffer.';
+        setStatus('offline', '');
+      }
+    } catch (error) {
+      note.textContent = `Live-Abfrage fehlgeschlagen: ${error.message}. Die Werkstatt bleibt nutzbar.`;
+      setStatus('offline', '');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   $('#kw-build').addEventListener('click', async () => {
     const seed = $('#kw-seed').value.trim();
     if (!seed) { $('#kw-seed').focus(); return; }
     try {
       const data = await api('/api/keywords', { method: 'POST', body: JSON.stringify({ seed, nicheId: state.nicheId }) });
       renderKeywordChips(data.ideas);
+      $('#kw-source').textContent = 'Offline-Werkstatt: Phrasen aus deinem Stamm plus kuratierte Suchbegriffe der Nische.';
     } catch (error) {
       setStatus(error.message, 'is-bad');
     }
@@ -707,7 +766,10 @@ function wire() {
     }
     const del = event.target.closest('[data-delete]');
     if (del) {
-      api(`/api/projects/${del.dataset.delete}`, { method: 'DELETE' }).then(loadProjects);
+      api(`/api/projects/${del.dataset.delete}`, { method: 'DELETE' }).then(() => {
+        loadProjects();
+        loadPortfolio();
+      });
       return;
     }
     const close = event.target.closest('[data-close]');
@@ -741,6 +803,10 @@ function wire() {
   $('#btn-projects').addEventListener('click', () => {
     $('#dlg-projects').showModal();
     loadProjects();
+  });
+  $('#portfolio-sales').addEventListener('change', (event) => {
+    const sales = Math.max(0, Number(event.target.value) || 0);
+    loadPortfolio(sales);
   });
   $('#btn-help').addEventListener('click', () => $('#dlg-help').showModal());
 

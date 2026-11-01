@@ -24,7 +24,9 @@ Es gibt keine Anmeldung, keine API-Keys, keine Cloud. Alles läuft auf deinem Re
 | Cover | Vollumschlag mit Rückenbreite, Beschnitt, Barcode-Freizone, 6 Farbwelten | Grafik/Illustration |
 | Kalkulation | Druckkosten, Mindestpreis, Tantieme, Umsatzszenarien, E-Book-Band | – |
 | Metadaten | Titel, Untertitel, Beschreibung, 7 Keywords, Kategorien, Copy-Paste-Text | Textqualität |
-| Recherche | Kuratierte Nischen-Pakete, Keyword-Werkstatt mit Longtail-Score | Marktprüfung |
+| E-Book | EPUB 3 mit Inhaltsverzeichnis, Kapiteln, Rätseln und Lösungen | Titelbild, Preisband |
+| Recherche | Kuratierte Nischen-Pakete, Keyword-Werkstatt, optionale Live-Suche bei Amazon | Marktprüfung |
+| Portfolio | Tantiemen, Mindestpreis-Warnungen und Umsatzmodell je gespeichertem Projekt | Verkaufsannahmen |
 | Veröffentlichung | PDF-Export, Checkliste | Upload, Preis, Freigabe |
 
 **Kein KI-Text.** Diese Entscheidung ist Absicht: Ratgeber-Fließtext, der aus einem Sprachmodell
@@ -40,7 +42,7 @@ Reflexionsfragen liefert die App – den Text schreibst du. Genau dafür sind di
 ```bash
 npm install     # einzige Abhängigkeit: pdf-lib
 npm start       # Server auf 0.0.0.0:3000
-npm test        # 53 Tests, keine Test-Frameworks, nur node:test
+npm test        # 81 Tests, keine Test-Frameworks, nur node:test
 ```
 
 Umgebung:
@@ -64,7 +66,10 @@ Voraussetzung: Node.js 20 oder neuer.
    Kalkulation und Preisleiter aktualisieren sich sofort.
 3. **Inhalt** – Schwierigkeit, Wort-Themen, Kapitelzahl. Der Seitenplan zeigt jede Seite mit Nummer.
 4. **Cover** – Farbwelt, Hilfslinien für Beschnitt/Falz/Sicherheitsabstand/Barcode.
-5. **Export** – Buchblock-PDF, Cover-PDF, Metadaten-JSON, Projekt speichern.
+5. **Export** – Buchblock-PDF, Cover-PDF, EPUB für Kindle, Metadaten-JSON, Projekt speichern.
+
+Über **Projekte** oben rechts öffnet sich das Portfolio: alle gespeicherten Bücher mit Tantieme,
+Mindestpreis-Warnung und einem Umsatzmodell für eine frei wählbare Verkaufszahl je Monat.
 
 ---
 
@@ -120,6 +125,15 @@ Vorschau im KDP-Dashboard; Preise und Druckkosten ändern sich dort gelegentlich
 - weiße Barcode-Freizone (Amazon setzt den Code dort ein)
 - optionale Hilfslinien (`?guides=1` oder Schalter in der App)
 
+**E-Book** (`*_kindle.epub`)
+
+- EPUB 3 mit `mimetype` als erstem, unkomprimiertem Eintrag, `container.xml`, `content.opf`, `nav.xhtml`
+- Metadaten: Titel, Untertitel, Autor, Sprache, Beschreibung, Keywords als Schlagwörter
+- Kapitel je Buch-Typ: Übungsbuch = ein Kapitel pro Abschnitt mit Übungen; Journal = Woche für Woche;
+  Rätselbuch = zehn Rätsel je Kapitel plus gesammelter Lösungsteil; Sudoku als Tabelle, Wortsuche und
+  Labyrinthe als Monospace-Blöcke
+- Schreiblinien als gestrichelte Absätze, damit Übungen auch im E-Book funktionieren
+
 **Rätselqualität**
 
 - Sudoku: Lösungsgitter per Backtracking, Vorgaben werden paarweise (180°-Symmetrie) entfernt –
@@ -145,8 +159,11 @@ für die Frage „welche Version habe ich veröffentlicht?“.
 | POST | `/api/export/manuscript.pdf` | Buchblock als PDF |
 | POST | `/api/export/cover.pdf[?guides=1]` | Cover als PDF |
 | POST | `/api/export/metadata.json` | KDP-Metadaten + Copy-Paste-Text |
+| POST | `/api/export/ebook.epub` | EPUB 3 für Kindle |
+| GET | `/api/suggest?q=…&mkt=de` | Live-Suche bei Amazon (serverseitig), Fallback auf Offline-Werkstatt |
 | GET/POST | `/api/projects` | Projekte listen / speichern (lokal, `data/projects.json`) |
 | DELETE | `/api/projects/:id` | Projekt löschen |
+| GET | `/api/dashboard?sales=10` | Portfolio-Auswertung: Tantiemen, Summen, Warnungen |
 
 Konfigurationsobjekt (`config`), alle Felder optional außer `title` und `author`:
 
@@ -180,20 +197,35 @@ Farbwelten: `navy`, `sage`, `sand`, `crimson`, `mono`, `midnight`
 
 ---
 
+## Live-Keywords (optional)
+
+Der Button **„Amazon live“** fragt die öffentliche Autocomplete-Schnittstelle der Amazon-Büchersuche
+ab (`completion.amazon.de`, serverseitig, ohne Konto und ohne API-Key). Das Ergebnis wird zehn Minuten
+gecacht, Anfragen werden auf etwa eine pro Sekunde gedrosselt.
+
+Klappt das nicht – kein Netz, Amazon blockt, Format geändert – fällt die App sichtbar auf die
+Offline-Werkstatt zurück („Amazon nicht erreichbar … Offline-Werkstatt“) und bleibt voll nutzbar.
+Nachfrage- und Wettbewerbswerte sind in beiden Fällen **Heuristiken**, keine gemessenen Marktdaten.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-53 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
+81 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
 
 - **kdp** – Rückenformel, Beschnitt, Barcode-Zone, Ränder, Druckkosten, Tantiemen, Preisleiter
 - **puzzles** – Sudoku-Regelkonformität, Eindeutigkeit der Lösung, Determinismus; Wortsuche-Auffindbarkeit;
   Labyrinth-Perfektheit und lückenlose Lösungspfade
 - **compose** – Validierung, gerade Seitenzahl, exakte Seitenzahl im Plan, alle Buch-Typen
 - **pdf** – gültiger PDF-Header, exakte MediaBox, alle Formate, Cover-Geometrie, WinAnsi-Textumbruch
-- **api** – alle Endpunkte inkl. Fehlerfälle, Export-Dateinamen, Projekt-CRUD, Path-Traversal-Schutz
+- **epub** – CRC32-Prüfwerte, ZIP-Struktur, mimetype-Regel, Manifest/Spine-Konsistenz, Kapitel je Buch-Typ,
+  XML-Maskierung und Determinismus
+- **research** – Amazon-Antwortparser inkl. kaputter Formate, Longtail-Scoring, Fallback bei HTTP- und
+  Netzwerkfehlern, Portfolio-Aggregation und Unterpreis-Warnungen
+- **api** – alle Endpunkte inkl. Fehlerfälle, Export-Dateinamen, EPUB-Download, Projekt-CRUD, Dashboard,
+  Path-Traversal-Schutz
 
 ---
 
@@ -207,6 +239,11 @@ npm test
   vor dem ersten Upload in der KDP-Hilfe.
 - **Kein ISBN-Kauf, kein Marketing.** Sichtbarkeit entsteht über Cover, Titel und Rezensionen – nicht
   über die Anzahl veröffentlichter Bücher.
+- **Das E-Book hat Grenzen.** Rätsel und Labyrinthe im EPUB sind für kleine Displays gedacht; für
+  Puzzle-Bücher bleibt das Taschenbuch das bessere Produkt. Ein Titelbild (JPG/PNG) musst du im
+  KDP-Dashboard separat hochladen – EPUB und Cover-PDF sind dort zwei verschiedene Uploads.
+- **Die Live-Suche ist eine Abkürzung, kein Marktforschungstool.** Sie zeigt, was Amazon vorschlägt –
+  nicht, ob ein Buch sich verkauft.
 
 ---
 
@@ -221,6 +258,10 @@ server/
     validate.mjs            Validierung und Normalisierung der Konfiguration
     compose.mjs             Seitenplan, Statistiken, Cover-Texte
     store.mjs               Projekt-Ablage (JSON, lokal)
+    zip.mjs                 ZIP-Writer/Leser (Basis für EPUB)
+    epub.mjs                EPUB-3-Builder
+    suggest.mjs             Amazon-Autocomplete-Proxy mit Cache und Fallback
+    portfolio.mjs           Umsatz-Auswertung gespeicherter Projekte
     rng.mjs                 deterministischer Zufall
     content/
       sudoku.mjs            Sudoku mit Eindeutigkeitsprüfung

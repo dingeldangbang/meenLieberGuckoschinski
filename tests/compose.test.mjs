@@ -90,8 +90,16 @@ test('Übungsbuch enthält Kapitel mit Übungen', () => {
 test('Journal wechselt Tagesseiten und Wochenrückblicke', () => {
   const { config } = validateBookConfig({ ...base, generator: 'journal', pageCount: 60 });
   const plan = composeBook(config);
-  assert.ok(plan.pages.some((p) => p.type === 'journalDay'));
-  assert.ok(plan.pages.some((p) => p.type === 'weekly'));
+  const days = plan.pages.filter((p) => p.type === 'journalDay');
+  const weeks = plan.pages.filter((p) => p.type === 'weekly');
+  assert.ok(days.length > 20);
+  assert.ok(weeks.length >= 6);
+  // Wochen nummerieren aufsteigend und jede Woche folgt genau sieben Tagen
+  assert.deepEqual(weeks.map((w) => w.week), weeks.map((_, i) => i + 1));
+  assert.equal(days[0].index, 1);
+  assert.equal(days.at(-1).index, days.length);
+  const firstWeekPosition = plan.pages.findIndex((p) => p.type === 'weekly');
+  assert.equal(plan.pages.slice(0, firstWeekPosition).filter((p) => p.type === 'journalDay').length, 7);
 });
 
 test('Notizbuch füllt mit dem gewählten Raster', () => {

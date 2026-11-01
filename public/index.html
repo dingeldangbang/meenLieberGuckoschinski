@@ -48,8 +48,10 @@
               <p class="muted">Tippe einen Nischen-Stamm ein. Du bekommst lange Suchphrasen und kannst bis zu 7 in die KDP-Slots übernehmen.</p>
               <div class="row">
                 <input id="kw-seed" type="text" placeholder="z. B. rätselbuch für senioren" autocomplete="off" />
-                <button class="btn" id="kw-build" type="button">Vorschläge</button>
+                <button class="btn" id="kw-build" type="button">Werkstatt</button>
+                <button class="btn primary" id="kw-live" type="button">Amazon live</button>
               </div>
+              <p class="fineprint" id="kw-source" role="status">Offline-Werkstatt: Phrasen werden aus deinem Stamm gebildet. „Amazon live“ fragt die echte Suchleiste ab (serverseitig, ohne Konto).</p>
               <div id="kw-ideas" class="chips" aria-live="polite"></div>
               <h4 class="sub">Ausgewählt <span id="kw-count" class="count">0 / 7</span></h4>
               <div id="kw-selected" class="chips chips-selected"></div>
@@ -205,6 +207,10 @@
                   <strong>Cover</strong>
                   <span>PDF · Vollumschlag inkl. Beschnitt</span>
                 </button>
+                <button class="export-tile" data-export="ebook" type="button">
+                  <strong>E-Book (EPUB)</strong>
+                  <span>EPUB 3 für Kindle, mit Inhaltsverzeichnis</span>
+                </button>
                 <button class="export-tile" data-export="metadata" type="button">
                   <strong>Metadaten</strong>
                   <span>JSON + Copy-Paste-Text für KDP</span>
@@ -235,6 +241,7 @@
                 <li><label><input type="checkbox" /> Buchblock-PDF hochladen, Druckvorschau prüfen (keine Warnungen)</label></li>
                 <li><label><input type="checkbox" /> Cover-PDF als „fertige Datei“ hochladen, Rückenbreite muss passen</label></li>
                 <li><label><input type="checkbox" /> Preis setzen: mindestens der angezeigte Mindestpreis</label></li>
+                <li><label><input type="checkbox" /> Optional E-Book: EPUB hochladen, Titelbild separat – 70 % Tantieme nur zwischen 2,99 € und 9,99 €</label></li>
                 <li><label><input type="checkbox" /> Kostenlose KDP-ISBN zuweisen, danach „Veröffentlichen“</label></li>
                 <li><label><input type="checkbox" /> Nach Freigabe: Rezensionen der ersten 10 Käufe beobachten und Auflage 2 planen</label></li>
               </ol>
@@ -280,8 +287,17 @@
 
     <dialog id="dlg-projects" class="dialog">
       <div class="dialog-head">
-        <h2>Projekte</h2>
+        <h2>Portfolio</h2>
         <button class="btn ghost small" data-close type="button">schließen</button>
+      </div>
+      <div class="portfolio">
+        <div class="portfolio-head">
+          <span class="fineprint">Verkäufe je Buch und Monat (Modellrechnung):</span>
+          <input id="portfolio-sales" type="number" min="0" max="10000" step="5" value="10" aria-label="Angenommene Verkäufe je Buch pro Monat" />
+        </div>
+        <div class="metrics" id="portfolio-metrics"></div>
+        <div class="table-wrap"><table class="table" id="portfolio-table"></table></div>
+        <p class="fineprint" id="portfolio-note"></p>
       </div>
       <div id="projects-list" class="projects"></div>
     </dialog>

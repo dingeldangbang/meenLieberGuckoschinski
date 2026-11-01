@@ -154,6 +154,50 @@ test('Projekte lassen sich speichern, laden und löschen', async () => {
   assert.equal(missing.status, 404);
 });
 
+test('E-Book-Export liefert ein EPUB mit korrektem mimetype', async () => {
+  const response = await post('/api/export/ebook.epub', { config });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/epub+zip');
+  assert.match(response.headers.get('content-disposition'), /wortsuche-fuer-weltentdecker_kindle\.epub/);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assert.equal(bytes.readUInt32LE(0), 0x04034b50);
+  assert.equal(bytes.subarray(30, 38).toString(), 'mimetype');
+  assert.equal(bytes.subarray(38, 58).toString(), 'application/epub+zip');
+});
+
+test('Live-Keywords verlangen mindestens zwei Zeichen (kein Netzaufruf)', async () => {
+  const response = await fetch(`${base}/api/suggest?q=a`);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.live, false);
+  assert.equal(data.source, 'invalid');
+});
+
+test('Keyword-Recherche liefert auch ohne Amazon-Netz eine Antwort', async () => {
+  const response = await fetch(`${base}/api/suggest?q=r%C3%A4tselbuch%20f%C3%BCr`);
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.ok(Array.isArray(data.ideas));
+  assert.ok(data.ideas.length > 0 || data.live === true);
+  assert.ok(typeof data.note === 'string');
+});
+
+test('Dashboard aggregiert gespeicherte Projekte', async () => {
+  await post('/api/projects', { name: 'Portfolio A', config });
+  await post('/api/projects', { name: 'Portfolio B', config: { ...config, title: 'Zweites', pageCount: 200, priceEur: 12.99 } });
+
+  const data = await (await fetch(`${base}/api/dashboard?sales=7`)).json();
+  assert.equal(data.summary.projectCount, 2);
+  assert.equal(data.summary.salesPerBook, 7);
+  assert.equal(data.summary.totalPages, 248);
+  assert.ok(data.summary.monthlyEurAllEur > 0);
+  assert.equal(data.rows.length, 2);
+  for (const row of data.rows) {
+    assert.ok(row.royaltyPerSaleEur > 0);
+    assert.ok(row.spineIn > 0);
+  }
+});
+
 test('Unbekannte API-Pfade liefern 404', async () => {
   const response = await fetch(`${base}/api/gibtsnicht`);
   assert.equal(response.status, 404);

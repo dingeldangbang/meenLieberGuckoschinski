@@ -477,6 +477,11 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .dialog .help h3 { color: var(--accent); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.07em; margin-top: 8px; }
 .dialog .help ul, .dialog .help ol { margin: 0; padding-left: 20px; color: var(--muted); font-size: 0.88rem; display: flex; flex-direction: column; gap: 5px; }
 
+.portfolio { padding: 14px 18px 4px; display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid var(--line); }
+.portfolio-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.portfolio-head input { width: 96px; }
+.table td.warn { color: var(--warn); }
+
 .projects { padding: 14px; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
 .project {
   display: flex;

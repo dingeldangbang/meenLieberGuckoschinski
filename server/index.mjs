@@ -11,6 +11,9 @@ import { validateBookConfig } from './lib/validate.mjs';
 import { composeBook, summarizePlan } from './lib/compose.mjs';
 import { renderManuscriptPdf } from './lib/pdf/manuscript.mjs';
 import { renderCoverPdf, COVER_STYLES } from './lib/pdf/cover.mjs';
+import { buildEpub } from './lib/epub.mjs';
+import { keywordResearch } from './lib/suggest.mjs';
+import { buildPortfolio } from './lib/portfolio.mjs';
 import { listProjects, saveProject, deleteProject } from './lib/store.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -146,6 +149,11 @@ function metadataFor(plan) {
       bleedIn: cover.bleedIn,
       pixels300dpi: cover.pixels300dpi,
     },
+    ebook: {
+      format: 'EPUB 3 (Kindle-kompatibel)',
+      royaltyBand: '70 % nur zwischen 2,99 € und 9,99 €, sonst 35 %',
+      note: 'Im KDP-Dashboard als E-Book hochladen; Titelbild separat als JPG/PNG.',
+    },
     pricing: {
       listPriceEur: royalties.listPriceEur,
       printingCostEur: royalties.printingCostEur,
@@ -236,6 +244,19 @@ async function handleApi(req, res, url) {
     return sendPdf(res, bytes, `${slugify(plan.config.title)}_cover${guides ? '_hilfslinien' : ''}.pdf`);
   }
 
+  if (pathname === '/api/export/ebook.epub' && req.method === 'POST') {
+    const body = await readBody(req);
+    const plan = buildPlan(body.config ?? body);
+    const epub = buildEpub(plan);
+    res.writeHead(200, {
+      'Content-Type': 'application/epub+zip',
+      'Content-Length': epub.length,
+      'Content-Disposition': `attachment; filename="${slugify(plan.config.title)}_kindle.epub"`,
+      'Cache-Control': 'no-store',
+    });
+    return res.end(epub);
+  }
+
   if (pathname === '/api/export/metadata.json' && req.method === 'POST') {
     const body = await readBody(req);
     const plan = buildPlan(body.config ?? body);
@@ -245,8 +266,26 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (pathname === '/api/suggest' && req.method === 'GET') {
+    const query = String(url.searchParams.get('q') ?? '').slice(0, 80);
+    const marketplace = ['de', 'com', 'co.uk'].includes(url.searchParams.get('mkt') ?? '')
+      ? url.searchParams.get('mkt')
+      : 'de';
+    if (query.trim().length < 2) {
+      return sendJson(res, 200, { source: 'invalid', live: false, ideas: [], suggestions: [], note: 'Mindestens zwei Zeichen eingeben.' });
+    }
+    const result = await keywordResearch(query, { marketplace });
+    return sendJson(res, 200, result);
+  }
+
   if (pathname === '/api/projects' && req.method === 'GET') {
     return sendJson(res, 200, { projects: await listProjects() });
+  }
+
+  if (pathname === '/api/dashboard' && req.method === 'GET') {
+    const projects = await listProjects();
+    const salesPerBook = Number(url.searchParams.get('sales') ?? 10);
+    return sendJson(res, 200, buildPortfolio(projects, { salesPerBook }));
   }
 
   if (pathname === '/api/projects' && req.method === 'POST') {
