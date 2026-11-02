@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { TRIM_SIZES, PAPER_THICKNESS, priceLadder } from './lib/kdp.mjs';
+import { TRIM_SIZES, PAPER_THICKNESS, PRINT_PRICING, ROYALTY_TIERS, priceLadder } from './lib/kdp.mjs';
 import { GENERATORS, NICHE_PACKS, buildKeywordIdeas, listNiches, sampleTitleFor } from './lib/niches.mjs';
 import { wordsetList } from './lib/content/words.mjs';
 import { validateBookConfig } from './lib/validate.mjs';
@@ -15,6 +15,9 @@ import { buildEpub } from './lib/epub.mjs';
 import { keywordResearch } from './lib/suggest.mjs';
 import { buildPortfolio } from './lib/portfolio.mjs';
 import { listProjects, saveProject, deleteProject } from './lib/store.mjs';
+import { preflightPdf } from './lib/preflight.mjs';
+import { complianceReport, KNOWN_TRADEMARKS, HYPE_WORDS, GENERIC_TERMS } from './lib/policy.mjs';
+import { renderMetadataSheet } from './lib/pdf/metadata-sheet.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -276,6 +279,60 @@ async function handleApi(req, res, url) {
     }
     const result = await keywordResearch(query, { marketplace });
     return sendJson(res, 200, result);
+  }
+
+  if (pathname === '/api/pricing' && req.method === 'GET') {
+    // Rechenmodell offenlegen - KDP ändert Preise und Tantiemestufen
+    return sendJson(res, 200, {
+      pricing: PRINT_PRICING,
+      royaltyTiers: ROYALTY_TIERS,
+      marketplace: url.searchParams.get('mkt') ?? 'de',
+      pageCount: Number(url.searchParams.get('pages') ?? 120),
+      ladder: priceLadder({
+        pageCount: Number(url.searchParams.get('pages') ?? 120),
+        marketplace: url.searchParams.get('mkt') ?? 'de',
+      }),
+      disclaimer: 'Rechenmodell, keine Zusage. Verbindlich ist die KDP-Druckkosten-Vorschau.',
+    });
+  }
+
+  if (pathname === '/api/compliance' && req.method === 'POST') {
+    const body = await readBody(req);
+    const plan = buildPlan(body.config ?? body);
+    return sendJson(res, 200, {
+      compliance: complianceReport(plan.config, plan),
+      lists: { trademarks: KNOWN_TRADEMARKS, generic: GENERIC_TERMS, hypeWords: HYPE_WORDS },
+    });
+  }
+
+  if (pathname === '/api/preflight' && req.method === 'POST' && url.searchParams.get('kind') !== 'cover') {
+    const body = await readBody(req);
+    const plan = buildPlan(body.config ?? body);
+    const bytes = await renderManuscriptPdf(plan);
+    const result = await preflightPdf(bytes, { kind: 'manuscript', config: plan, expectedPages: plan.config.pageCount });
+    return sendJson(res, 200, { kind: 'manuscript', ...result, compliance: complianceReport(plan.config, plan) });
+  }
+
+  if (pathname === '/api/preflight' && req.method === 'POST' && url.searchParams.get('kind') === 'cover') {
+    const body = await readBody(req);
+    const plan = buildPlan(body.config ?? body);
+    const bytes = await renderCoverPdf(plan);
+    const result = await preflightPdf(bytes, { kind: 'cover', config: plan });
+    return sendJson(res, 200, { kind: 'cover', ...result });
+  }
+
+  if (pathname === '/api/export/metadata-sheet.pdf' && req.method === 'POST') {
+    const body = await readBody(req);
+    const plan = buildPlan(body.config ?? body);
+    const metadata = metadataFor(plan);
+    const compliance = complianceReport(plan.config, plan);
+    const flight = await preflightPdf(await renderManuscriptPdf(plan), {
+      kind: 'manuscript',
+      config: plan,
+      expectedPages: plan.config.pageCount,
+    });
+    const sheet = await renderMetadataSheet(plan, { metadata, compliance, preflight: flight });
+    return sendPdf(res, sheet, `${slugify(plan.config.title)}_metadaten.pdf`);
   }
 
   if (pathname === '/api/projects' && req.method === 'GET') {

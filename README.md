@@ -27,7 +27,8 @@ Es gibt keine Anmeldung, keine API-Keys, keine Cloud. Alles läuft auf deinem Re
 | E-Book | EPUB 3 mit Inhaltsverzeichnis, Kapiteln, Rätseln und Lösungen | Titelbild, Preisband |
 | Recherche | Kuratierte Nischen-Pakete, Keyword-Werkstatt, optionale Live-Suche bei Amazon | Marktprüfung |
 | Portfolio | Tantiemen, Mindestpreis-Warnungen und Umsatzmodell je gespeichertem Projekt | Verkaufsannahmen |
-| Veröffentlichung | PDF-Export, Checkliste | Upload, Preis, Freigabe |
+| Prüfung | Preflight gegen KDP-Geometrie, Markenscan, KI-Offenlegung, Low-Content-Risiko | rechtliche Endkontrolle |
+| Veröffentlichung | PDF-Export, Metadaten-Arbeitsblatt, Checkliste | Upload, Preis, Freigabe |
 
 **Kein KI-Text.** Diese Entscheidung ist Absicht: Ratgeber-Fließtext, der aus einem Sprachmodell
 kommt, fliegt bei Amazon regelmäßig raus und bringt keine Rezensionen. Struktur, Übungen und
@@ -40,10 +41,21 @@ Reflexionsfragen liefert die App – den Text schreibst du. Genau dafür sind di
 ## Schnellstart
 
 ```bash
-npm install     # einzige Abhängigkeit: pdf-lib
+npm install     # zwei Abhängigkeiten: pdf-lib + fontkit (für eingebettete Schriften)
 npm start       # Server auf 0.0.0.0:3000
-npm test        # 81 Tests, keine Test-Frameworks, nur node:test
+npm test        # 105 Tests, keine Test-Frameworks, nur node:test
 ```
+
+Ohne Browser geht es auch – die CLI baut dasselbe Paket:
+
+```bash
+node bin/buchmaschine.mjs niches                       # kuratierte Nischen
+node bin/buchmaschine.mjs build --niche raetsel-senioren --pages 134 --out ./paket
+node bin/buchmaschine.mjs preflight --manuscript ./paket/*_buchblock_6x9.pdf --pages 134
+```
+
+`build` legt Buchblock-PDF, Cover-PDF, EPUB, Metadaten-JSON, das Metadaten-Arbeitsblatt und
+einen Text-Report in den Zielordner. Exit-Code 2, wenn der Preflight Fehler findet.
 
 Umgebung:
 
@@ -87,19 +99,32 @@ Rücken = Seiten × Papierstärke  (kaufmännisch auf 4 Stellen gerundet)
 ```
 Breite  = 0,125 + Trim + Rücken + Trim + 0,125   (Beschnitt links/rechts)
 Höhe    = Trim + 0,125 + 0,125                   (Beschnitt oben/unten)
-Barcode = 2,0" × 1,2", 0,25" vom Beschnitt entfernt, unten links auf der Rückseite
+Barcode = 2,0" × 1,2", unten rechts auf der Rückseite (0,25" von Unterkante und Rücken)
 ```
+
+Rückenbeschriftung ist erst ab **80 Seiten** erlaubt und hält 0,0625" Abstand zu beiden Falzen;
+darunter bleibt der Rücken leer und der Preflight meldet das als bestanden
+(„Kein Rückentext: unter 80 Seiten“).
 
 Beispiel 134 Seiten, 6 × 9 Zoll, weißes Papier: Rücken **0,3018"**, Cover **12,5518" × 9,25"**
 (= 3.766 × 2.775 px bei 300 dpi).
 
-**Druckkosten & Tantieme** (Amazon.de, Schwarzweiß):
+**Druckkosten & Tantieme** (Amazon.de, Schwarzweiß, KDP-Staffel):
 
 ```
-Druckkosten = 0,60 € + 0,012 € × Seiten
-Tantieme    = 60 % × Verkaufspreis − Druckkosten
-Mindestpreis = Druckkosten / 0,60   (aufgerundet auf Cent)
+24–110 Seiten   Druckkosten = 2,30 €  (Pauschale, Standardformat)
+ab 111 Seiten   Druckkosten = 1,00 € + 0,012 € × Seiten
+Großformat      Druckkosten = 2,84 €  bzw. 1,00 € + 0,017 € × Seiten
+Amazon.co.uk    Druckkosten = 0,85 £  + 0,010 £ × Seiten
+
+Tantieme     = Tantiemensatz × Verkaufspreis − Druckkosten
+Tantiemensatz = 60 % ab 9,99 €,  50 % bis 9,98 €
+Mindestpreis  = kleinster Preis, bei dem die Tantieme ≥ 0 ist
 ```
+
+Der Sprung an der 9,99-€-Schwelle ist die häufigste Fehlkalkulation im Selbstverlag:
+bei 134 Seiten bringt ein Preis von 9,50 € **1,35 €** Tantieme, bei 9,99 € sind es **3,38 €**.
+Das Modell rechnet das aus (`thresholdJumpEur`) und rät zum Anheben (`recommendation`).
 
 Diese Werte sind ein **Rechenmodell**, keine Zusage von Amazon. Verbindlich ist immer die
 Vorschau im KDP-Dashboard; Preise und Druckkosten ändern sich dort gelegentlich.
@@ -113,17 +138,27 @@ Vorschau im KDP-Dashboard; Preise und Druckkosten ändern sich dort gelegentlich
 **Buchblock** (`*_buchblock_*.pdf`)
 
 - exaktes Trim-Maß, kein Beschnitt
-- gespiegelte Innenränder (Innen 0,625"/0,75", außen 0,625", ab 151 Seiten 0,75")
+- gespiegelte Innenränder nach KDP-Staffel (Innensteg 0,375" bis 150 Seiten, dann 0,5"/0,625"/0,75"/0,875",
+  plus Komfortzugabe; außen/oben/unten mindestens 0,625")
 - Titel, Impressum mit Haftungsausschluss, Anleitung, „Dieses Buch gehört“, Inhalt, Lösungen, Schlussseite
-- Seitenzahlen mittig unten, Vorlaufseiten ohne Nummer
-- eingebettete Standardschriften (Times/Helvetica, WinAnsi inkl. € und Umlauten)
+- Seitenzahlen mittig unten, Vorlaufseiten ohne Nummer, Grundlinie nie unter 0,25" Sicherheitsabstand
+- eingebettete **EB Garamond** (Regular, Italic, Bold, OFL-lizenziert, keine Netzabhängigkeit beim Rendern),
+  Ligaturen abgeschaltet, damit Text kopierbar, durchsuchbar und für KDP prüfbar bleibt
 
 **Cover** (`*_cover*.pdf`)
 
 - einseitiger Vollumschlag inklusive 0,125" Beschnitt auf allen Seiten
-- Rückenbeschriftung ab ca. 0,17" Rückenbreite
-- weiße Barcode-Freizone (Amazon setzt den Code dort ein)
+- Rückenbeschriftung erst ab 80 Seiten, mit 0,0625" Abstand zu beiden Falzen; darunter bewusst leer
+- weiße Barcode-Freizone 2 × 1,2" unten rechts auf der Rückseite (Amazon setzt den Code dort ein)
+- Sicherheitsabstand 0,25" zu allen Kanten, Texte nie unter 7 pt
 - optionale Hilfslinien (`?guides=1` oder Schalter in der App)
+
+**Metadaten-Arbeitsblatt** (`*_metadaten.pdf`)
+
+- Seite 1: Titel, Untertitel, Autor, Beschreibung, 7 Keyword-Zeilen zum Abschreiben, Kategorien,
+  Druckoptionen, Cover-Maße und Preiskalkulation
+- Seite 2: KI-Offenlegung im Wortlaut, Marken-/Sprachprüfung, Low-Content-Risiko, kompletter
+  Preflight-Bericht und der Ablauf im KDP-Dashboard
 
 **E-Book** (`*_kindle.epub`)
 
@@ -179,6 +214,7 @@ Konfigurationsobjekt (`config`), alle Felder optional außer `title` und `author
   "trim": "6x9",
   "paper": "white",
   "priceEur": 9.99,
+  "marketplace": "de",
   "seed": "buch-1",
   "nicheId": "raetsel-senioren",
   "coverStyle": "sand",
@@ -213,9 +249,15 @@ Nachfrage- und Wettbewerbswerte sind in beiden Fällen **Heuristiken**, keine ge
 npm test
 ```
 
-81 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
+105 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
 
-- **kdp** – Rückenformel, Beschnitt, Barcode-Zone, Ränder, Druckkosten, Tantiemen, Preisleiter
+- **kdp** – Rückenformel, Beschnitt, Barcode-Zone, Ränder, Druckkostenstaffel, Tantiemensprung
+  an der 9,99-€-Schwelle, Mindestpreis ≥ Druckkosten, Rückenbeschriftung ab 80 Seiten
+- **preflight** – echter Buchblock und Cover gegen die KDP-Geometrie, Fehlerfälle (fehlende
+  PDF-Kennung, falscher Beschnitt, abweichende Seitenzahl), Schrift-Einbettung und
+  Ligatur-Regression, Metadaten-Blatt
+- **policy** – Markenscan mit Wortgrenzen, Gattungsbegriffe, Werbesprache, KI-Offenlegung,
+  Low-Content-Risiko
 - **puzzles** – Sudoku-Regelkonformität, Eindeutigkeit der Lösung, Determinismus; Wortsuche-Auffindbarkeit;
   Labyrinth-Perfektheit und lückenlose Lösungspfade
 - **compose** – Validierung, gerade Seitenzahl, exakte Seitenzahl im Plan, alle Buch-Typen
@@ -224,8 +266,8 @@ npm test
   XML-Maskierung und Determinismus
 - **research** – Amazon-Antwortparser inkl. kaputter Formate, Longtail-Scoring, Fallback bei HTTP- und
   Netzwerkfehlern, Portfolio-Aggregation und Unterpreis-Warnungen
-- **api** – alle Endpunkte inkl. Fehlerfälle, Export-Dateinamen, EPUB-Download, Projekt-CRUD, Dashboard,
-  Path-Traversal-Schutz
+- **api** – alle Endpunkte inkl. Fehlerfälle, Export-Dateinamen, EPUB-Download, Preflight, Compliance,
+  Preisstaffel, Projekt-CRUD, Dashboard, Path-Traversal-Schutz
 
 ---
 
@@ -239,6 +281,12 @@ npm test
   vor dem ersten Upload in der KDP-Hilfe.
 - **Kein ISBN-Kauf, kein Marketing.** Sichtbarkeit entsteht über Cover, Titel und Rezensionen – nicht
   über die Anzahl veröffentlichter Bücher.
+- **Die Schrift ist eingebettet und lizenziert.** EB Garamond steht unter der SIL Open Font License 1.1
+  (`assets/fonts/OFL.txt`), Einbettung in Druckdateien ist ausdrücklich erlaubt. Fehlen die Dateien,
+  fällt der Export auf die Standard-14-Schriften zurück – der Preflight markiert das dann als Fehler,
+  weil KDP eingebettete Schriften verlangt.
+- **Kein automatischer Upload.** Die App erzeugt Dateien und Text; das Einstellen bei KDP bleibt ein
+  bewusster, manueller Schritt. Automatisierte Uploads verstoßen gegen die KDP-Bedingungen.
 - **Das E-Book hat Grenzen.** Rätsel und Labyrinthe im EPUB sind für kleine Displays gedacht; für
   Puzzle-Bücher bleibt das Taschenbuch das bessere Produkt. Ein Titelbild (JPG/PNG) musst du im
   KDP-Dashboard separat hochladen – EPUB und Cover-PDF sind dort zwei verschiedene Uploads.
@@ -253,7 +301,9 @@ npm test
 server/
   index.mjs                 HTTP-Server, API, statische Auslieferung
   lib/
-    kdp.mjs                 Geometrie, Druckkosten, Tantiemen
+    kdp.mjs                 Geometrie, Druckkosten, Tantiemen, Mindestpreis
+    preflight.mjs           Prüfung fertiger PDFs (Trim, Ränder, Seiten, Schriften)
+    policy.mjs              KI-Offenlegung, Markenscan, Low-Content-Risiko
     niches.mjs              Nischen-Pakete, Keyword-Werkstatt, Titelvorschläge
     validate.mjs            Validierung und Normalisierung der Konfiguration
     compose.mjs             Seitenplan, Statistiken, Cover-Texte
@@ -271,8 +321,12 @@ server/
       text.mjs              kuratierte Kapitel, Prompts, Übungen
     pdf/
       text.mjs              WinAnsi-Sanitizing, Umbruch, Linien, Raster
+      fonts.mjs             Einbettung von EB Garamond (Regular/Italic/Bold)
       manuscript.mjs        Buchblock-Renderer
       cover.mjs             Vollumschlag-Renderer
+      metadata-sheet.mjs    Metadaten-Arbeitsblatt als PDF
+assets/fonts/               EB Garamond (SIL Open Font License 1.1) + OFL.txt
+bin/buchmaschine.mjs        CLI: build, preflight, niches
 public/
   index.html, styles.css, app.js    Studio-Oberfläche (ohne Framework, ohne Build)
 tests/                              node:test-Suite

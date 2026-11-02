@@ -215,6 +215,10 @@
                   <strong>Metadaten</strong>
                   <span>JSON + Copy-Paste-Text für KDP</span>
                 </button>
+                <button class="export-tile" data-export="sheet" type="button">
+                  <strong>Metadaten-Blatt</strong>
+                  <span>PDF zum Abarbeiten am zweiten Bildschirm</span>
+                </button>
                 <button class="export-tile" data-export="save" type="button">
                   <strong>Projekt speichern</strong>
                   <span>lokal in data/projects.json</span>
@@ -230,6 +234,17 @@
                 <button class="btn" id="btn-copy" type="button">Copy-Paste-Text kopieren</button>
               </div>
               <pre class="copybox" id="copybox" aria-label="Copy-Paste-Text">…</pre>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h3>Compliance &amp; Preflight</h3>
+                <button class="btn ghost small" id="btn-preflight" type="button">Jetzt prüfen</button>
+              </div>
+              <p class="fineprint">Prüft den fertigen Buchblock gegen die KDP-Geometrie (Trim, Ränder, Seitenzahl, eingebettete Schriften) und scannt Titel, Untertitel, Beschreibung und Keywords nach Marken, Werbeversprechen und Low-Content-Risiko.</p>
+              <div id="preflight-result" aria-live="polite" class="preflight-result">
+                <p class="fineprint">Noch nicht geprüft.</p>
+              </div>
             </div>
 
             <div class="card">

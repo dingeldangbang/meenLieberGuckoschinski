@@ -56,6 +56,14 @@ function escapeXml(value) {
     .replace(/"/g, '&quot;');
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function download(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -560,6 +568,11 @@ async function runExport(kind) {
       download(`${name}_kdp_metadaten.json`, new Blob([JSON.stringify(data.metadata, null, 2)], { type: 'application/json' }));
       $('#copybox').textContent = data.copyPasteText;
       note.textContent = 'Metadaten exportiert – Copy-Paste-Text steht unten bereit.';
+    } else if (kind === 'sheet') {
+      note.textContent = 'Metadaten-Blatt wird gesetzt …';
+      const response = await api('/api/export/metadata-sheet.pdf', { method: 'POST', body });
+      download(`${name}_metadaten.pdf`, await response.blob());
+      note.textContent = 'Metadaten-Blatt exportiert – alle Angaben und der Preflight-Bericht auf zwei Seiten.';
     } else if (kind === 'save') {
       const data = await api('/api/projects', { method: 'POST', body });
       note.textContent = `Projekt „${data.project.name}“ lokal gespeichert.`;
@@ -591,6 +604,59 @@ async function downloadBoth() {
     setStatus('exportiert', 'is-good');
   } catch (error) {
     note.textContent = `Fehler: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderPreflight(data) {
+  const box = $('#preflight-result');
+  if (!box) return;
+  const compliance = data.compliance;
+  const checks = data.checks ?? [];
+  const bad = checks.filter((c) => !c.ok);
+  const statusClass = data.status === 'pass' ? 'is-good' : data.status === 'warn' ? 'is-warn' : 'is-bad';
+  const summary = data.status === 'pass'
+    ? `Buchblock besteht alle ${checks.length} Prüfungen.`
+    : `${bad.length} von ${checks.length} Prüfungen auffällig.`;
+  const items = checks.map((check) => `
+      <li class="${check.ok ? 'ok' : 'bad'}">
+        <span aria-hidden="true">${check.ok ? '✓' : '!'}</span>
+        <span>${escapeHtml(check.detail)}</span>
+      </li>`).join('');
+  const ai = compliance ? `
+      <div class="preflight-block">
+        <h4>KI-Offenlegung</h4>
+        <p>${escapeHtml(compliance.aiDisclosure.answer)}</p>
+        <p class="fineprint">${escapeHtml(compliance.aiDisclosure.explanation)}</p>
+      </div>
+      <div class="preflight-block">
+        <h4>Marken &amp; Sprache</h4>
+        <p>${escapeHtml(compliance.trademark.message)}</p>
+        <p>Low-Content-Risiko: <strong>${escapeHtml(compliance.lowContent.level)}</strong> (${compliance.lowContent.structuredPageShare} % strukturierte Seiten)</p>
+        ${compliance.hype.hits.length ? `<p class="fineprint">Werbesprache: ${escapeHtml(compliance.hype.hits.join(', '))}</p>` : ''}
+      </div>` : '';
+  box.innerHTML = `
+    <p class="preflight-status ${statusClass}">${escapeHtml(summary)}</p>
+    <ul class="preflight-list">${items}</ul>
+    ${ai}
+    <p class="fineprint">${escapeHtml(compliance?.disclaimer ?? '')}</p>`;
+}
+
+async function runPreflight() {
+  const button = $('#btn-preflight');
+  const box = $('#preflight-result');
+  button.disabled = true;
+  box.innerHTML = '<p class="fineprint">Buchblock wird gesetzt und geprüft …</p>';
+  try {
+    state.config = collectConfig();
+    const body = JSON.stringify({ config: state.config });
+    const data = await api('/api/preflight', { method: 'POST', body });
+    renderPreflight(data);
+    setStatus('geprüft', data.status === 'pass' ? 'is-good' : 'is-warn');
+  } catch (error) {
+    box.innerHTML = `<p class="preflight-status is-bad">${escapeHtml(error.message)}</p>`;
+    setStatus(error.message, 'is-bad');
   } finally {
     button.disabled = false;
   }
@@ -798,6 +864,8 @@ function wire() {
   });
   $('#btn-refresh').addEventListener('click', () => refreshPreview());
   $('#btn-download-all').addEventListener('click', downloadBoth);
+  const preflightButton = $('#btn-preflight');
+  if (preflightButton) preflightButton.addEventListener('click', runPreflight);
   $$('[data-export]').forEach((button) => button.addEventListener('click', () => runExport(button.dataset.export)));
 
   $('#btn-projects').addEventListener('click', () => {

@@ -524,3 +524,19 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+
+/* Preflight-Karte (Schritt 5) */
+.preflight-result { display: flex; flex-direction: column; gap: 12px; }
+.preflight-status { margin: 0; font-weight: 600; font-size: 0.9rem; }
+.preflight-status.is-good { color: #2f6b48; }
+.preflight-status.is-warn { color: #8a6414; }
+.preflight-status.is-bad { color: #9b2c2c; }
+.preflight-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.preflight-list li { display: flex; gap: 8px; align-items: flex-start; font-size: 0.84rem; line-height: 1.4; color: var(--muted); }
+.preflight-list li span[aria-hidden] { flex: 0 0 16px; font-weight: 700; text-align: center; }
+.preflight-list li.ok span[aria-hidden] { color: #2f6b48; }
+.preflight-list li.bad span[aria-hidden] { color: #9b2c2c; }
+.preflight-list li.bad { color: #9b2c2c; }
+.preflight-block { border-top: 1px solid var(--line, #e4e0d8); padding-top: 10px; }
+.preflight-block h4 { margin: 0 0 4px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.preflight-block p { margin: 0 0 4px; font-size: 0.84rem; line-height: 1.45; }

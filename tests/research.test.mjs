@@ -104,9 +104,9 @@ test('Portfolio berechnet Tantiemen je Projekt', () => {
   assert.equal(summary.salesPerBook, 10);
 
   const senioren = rows.find((r) => r.id === 'p1');
-  assert.equal(senioren.printingCostEur, 2.21);
-  assert.equal(senioren.royaltyPerSaleEur, 3.78);
-  assert.equal(senioren.monthlyEur, 37.8);
+  assert.equal(senioren.printingCostEur, 2.61);
+  assert.equal(senioren.royaltyPerSaleEur, 3.38);
+  assert.equal(senioren.monthlyEur, 33.8);
   assert.ok(senioren.spineIn > 0.29 && senioren.spineIn < 0.31);
 });
 

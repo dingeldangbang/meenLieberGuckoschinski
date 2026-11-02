@@ -2,7 +2,7 @@
  * Buch-Komposition: aus einer Konfiguration wird ein vollständiger Seitenplan.
  * Determinismus: gleicher Seed + gleiche Konfiguration => identisches Buch.
  */
-import { coverDimensions, interiorMargins, royaltyBreakdown, revenueScenarios, printingCostEur } from './kdp.mjs';
+import { coverDimensions, interiorMargins, royaltyBreakdown, revenueScenarios, printingCost } from './kdp.mjs';
 import { generateSudoku } from './content/sudoku.mjs';
 import { generateWordSearch, suggestGridSize } from './content/wordsearch.mjs';
 import { generateMaze } from './content/maze.mjs';
@@ -217,8 +217,14 @@ export function composeBook(config) {
     priceEur: config.priceEur,
     trim: config.trim,
     paper: config.paper,
+    marketplace: config.marketplace ?? 'de',
   });
-  const revenue = revenueScenarios({ pageCount: config.pageCount, priceEur: config.priceEur });
+  const revenue = revenueScenarios({
+    pageCount: config.pageCount,
+    priceEur: config.priceEur,
+    trim: config.trim,
+    marketplace: config.marketplace ?? 'de',
+  });
 
   const stats = {
     pageCount: pages.length,
@@ -228,7 +234,10 @@ export function composeBook(config) {
     exerciseCount: body.exerciseCount ?? 0,
     chapterCount: body.chapterCount ?? 0,
     journalEntries: body.entryCount ?? 0,
-    printingCostEur: printingCostEur(config.pageCount),
+    printingCostEur: printingCost(config.pageCount, {
+      trim: config.trim,
+      marketplace: config.marketplace ?? 'de',
+    }),
   };
 
   const extras = coverExtras(config, stats);

@@ -1,6 +1,7 @@
 /** Buchblock-PDF im KDP-Format (exaktes Trim, gespiegelte Innenränder, Seitenzahlen). */
-import { PDFDocument, StandardFonts, rgb, degrees, LineCapStyle } from 'pdf-lib';
-import { INCH_TO_PT, trimSize } from '../kdp.mjs';
+import { PDFDocument, rgb, degrees, LineCapStyle } from 'pdf-lib';
+import { INCH_TO_PT, trimSize, TRIM_SAFE_MARGIN_IN } from '../kdp.mjs';
+import { embedBookFonts } from './fonts.mjs';
 import {
   COLORS,
   sanitizeText,
@@ -738,13 +739,7 @@ export async function renderManuscriptPdf(plan) {
   doc.setCreator('Buchmaschine (KDP-Studio)');
   doc.setProducer('Buchmaschine / pdf-lib');
 
-  const fonts = {
-    body: await doc.embedFont(StandardFonts.TimesRoman),
-    bodyBold: await doc.embedFont(StandardFonts.TimesRomanBold),
-    bodyItalic: await doc.embedFont(StandardFonts.TimesRomanItalic),
-    sans: await doc.embedFont(StandardFonts.Helvetica),
-    sansBold: await doc.embedFont(StandardFonts.HelveticaBold),
-  };
+  const fonts = await embedBookFonts(doc);
 
   for (let physical = 0; physical < pages.length; physical += 1) {
     const pageData = pages[physical];
@@ -780,11 +775,13 @@ export async function renderManuscriptPdf(plan) {
 
     if (pageData.number) {
       const label = String(pageData.number);
-      const size = 8.5;
+      const size = 9;
       const w = fonts.sans.widthOfTextAtSize(label, size);
+      // Live Element Margin: nie in die 0,25-Zoll-Zone an der Schnittkante
+      const maxBaseline = (TRIM_SAFE_MARGIN_IN + 0.05) * INCH_TO_PT;
       page.drawText(label, {
         x: (W - w) / 2,
-        y: Math.max(18, bottom * 0.5),
+        y: Math.min(maxBaseline, Math.max(TRIM_SAFE_MARGIN_IN * INCH_TO_PT, bottom * 0.5)),
         size,
         font: fonts.sans,
         color: COLORS.muted,

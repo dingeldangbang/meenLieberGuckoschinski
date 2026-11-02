@@ -1,7 +1,8 @@
 /** Vollumschlag-PDF (Rückseite + Rücken + Vorderseite + Beschnitt) nach KDP-Vorgabe. */
-import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
-import { INCH_TO_PT, coverDimensions } from '../kdp.mjs';
+import { PDFDocument, rgb, degrees } from 'pdf-lib';
+import { INCH_TO_PT, coverDimensions, SPINE_TEXT_SAFE_IN, TRIM_SAFE_MARGIN_IN } from '../kdp.mjs';
 import { sanitizeText, wrapText } from './text.mjs';
+import { embedBookFonts } from './fonts.mjs';
 
 export const COVER_STYLES = {
   navy: { label: 'Marine & Gold', bg: '#152037', accent: '#e3bd77', text: '#f8f6f1', sub: '#c9cfdd', mode: 'dark' },
@@ -55,18 +56,18 @@ export async function renderCoverPdf(plan, options = {}) {
   const backX = bleed;
   const spineX = bleed + trimW;
   const frontX = spineX + spineW;
-  const safe = 0.25 * INCH_TO_PT;
-  const safeBleed = 0.375 * INCH_TO_PT;
+  const safe = TRIM_SAFE_MARGIN_IN * INCH_TO_PT;
 
   const doc = await PDFDocument.create();
   doc.setTitle(`${sanitizeText(config.title)} - Cover`);
   doc.setAuthor(sanitizeText(config.author));
   doc.setCreator('Buchmaschine (KDP-Studio)');
 
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const regular = await doc.embedFont(StandardFonts.Helvetica);
-  const body = await doc.embedFont(StandardFonts.TimesRoman);
-  const bodyItalic = await doc.embedFont(StandardFonts.TimesRomanItalic);
+  const fonts = await embedBookFonts(doc);
+  const bold = fonts.sansBold;
+  const regular = fonts.sans;
+  const body = fonts.body;
+  const bodyItalic = fonts.bodyItalic;
 
   const page = doc.addPage([W, H]);
   const bg = hexColor(style.bg);
@@ -163,11 +164,13 @@ export async function renderCoverPdf(plan, options = {}) {
   /* --------------------------------- Rücken -------------------------------- */
   const spineCenter = spineX + spineW / 2;
   const spineLabel = sanitizeText(`${config.title} · ${config.author}`);
-  if (spineW >= 12) {
-    let size = 9;
-    while (size > 5 && bold.widthOfTextAtSize(spineLabel, size) > trimH - safe * 2) size -= 0.5;
+  const spineInnerHeight = trimH - SPINE_TEXT_SAFE_IN * 2 * INCH_TO_PT;
+  // KDP erlaubt Rückenbeschriftung erst ab 80 Seiten
+  if (dims.spineTextAllowed && spineW >= 10) {
+    let size = 10;
+    while (size > 5 && bold.widthOfTextAtSize(spineLabel, size) > spineInnerHeight) size -= 0.5;
     const w = bold.widthOfTextAtSize(spineLabel, size);
-    if (w <= trimH - safe * 2) {
+    if (w <= spineInnerHeight) {
       page.drawText(spineLabel, {
         x: spineCenter + size * 0.35,
         y: (H - w) / 2,
@@ -221,18 +224,20 @@ export async function renderCoverPdf(plan, options = {}) {
     backY -= 4;
   }
 
-  // Barcode-Freizone: weiß, damit Amazon den Code sauber einsetzen kann
+  // Barcode-Freizone: unten RECHTS auf der Rückseite (KDP-Vorgabe), rein weiß
+  const barcodeX = dims.barcodeZone.x * INCH_TO_PT;
+  const barcodeY = dims.barcodeZone.y * INCH_TO_PT;
   page.drawRectangle({
-    x: backX + safe,
-    y: bleed + safe,
+    x: barcodeX,
+    y: barcodeY,
     width: barcodeW,
     height: barcodeH,
     color: rgb(1, 1, 1),
   });
   page.drawText('ISBN / Barcode', {
-    x: backX + safe + 10,
-    y: bleed + safe + barcodeH / 2 + 2,
-    size: 7,
+    x: barcodeX + 10,
+    y: barcodeY + barcodeH / 2 + 2,
+    size: 7.5,
     font: regular,
     color: hexColor('#9a9a9a'),
   });
@@ -240,8 +245,8 @@ export async function renderCoverPdf(plan, options = {}) {
   // Verlagszeile
   page.drawText(sanitizeText(`Unabhängig veröffentlicht · ${config.author}`), {
     x: backX + safe,
-    y: bleed + safe + barcodeH + 16,
-    size: 7.2,
+    y: bleed + TRIM_SAFE_MARGIN_IN * INCH_TO_PT + 4,
+    size: 8,
     font: regular,
     color: sub,
   });
@@ -267,13 +272,23 @@ export async function renderCoverPdf(plan, options = {}) {
       ...dash,
     });
     page.drawRectangle({
-      x: backX + safe,
-      y: bleed + safe,
+      x: barcodeX,
+      y: barcodeY,
       width: barcodeW,
       height: barcodeH,
       borderColor: guide,
       borderWidth: 0.8,
     });
+    if (!dims.spineTextAllowed) {
+      page.drawText(sanitizeText('Kein Rueckentext: unter 80 Seiten'), {
+        x: spineX + 2,
+        y: H / 2,
+        size: 6.5,
+        font: regular,
+        color: guide,
+        rotate: degrees(90),
+      });
+    }
     const label = `${dims.totalWidthIn} x ${dims.totalHeightIn} Zoll · Ruecken ${dims.spineIn} Zoll · Beschnitt 0,125 Zoll`;
     page.drawText(sanitizeText(label), {
       x: bleed + 6,

@@ -154,6 +154,45 @@ test('Projekte lassen sich speichern, laden und löschen', async () => {
   assert.equal(missing.status, 404);
 });
 
+test('Preflight-Endpunkt prüft Buchblock und Cover gegen KDP-Regeln', async () => {
+  const manuscript = await (await post('/api/preflight', { config })).json();
+  assert.equal(manuscript.kind, 'manuscript');
+  assert.equal(manuscript.status, 'pass', manuscript.summary);
+  assert.ok(manuscript.checks.some((c) => c.id === 'fonts-embedded' && c.ok));
+  assert.equal(manuscript.compliance.status, 'pass');
+
+  const cover = await (await post('/api/preflight?kind=cover', { config })).json();
+  assert.equal(cover.kind, 'cover');
+  assert.equal(cover.status, 'pass', cover.summary);
+  assert.ok(cover.checks.some((c) => c.id === 'barcode-zone' && c.ok));
+});
+
+test('Compliance-Endpunkt liefert Offenlegung, Markenscan und Wortlisten', async () => {
+  const data = await (await post('/api/compliance', { config })).json();
+  assert.ok(data.compliance.aiDisclosure.answer.includes('KI'));
+  assert.equal(data.compliance.trademark.clean, true);
+  assert.ok(data.lists.trademarks.includes('lego'));
+  assert.ok(data.lists.generic.includes('sudoku'));
+});
+
+test('Preis-Endpunkt offenbart Druckkostenstaffel und Preisleiter', async () => {
+  const data = await (await fetch(`${base}/api/pricing?pages=200`)).json();
+  assert.equal(data.pricing.de.black.regular.perPage, 0.012);
+  assert.ok(data.ladder.prices.length > 0);
+  assert.ok(data.royaltyTiers.de.threshold === 9.99);
+});
+
+test('Metadaten-Blatt wird als PDF mit zwei Seiten geliefert', async () => {
+  const response = await post('/api/export/metadata-sheet.pdf', { config });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+  const { PDFDocument } = await import('pdf-lib');
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  assert.equal(doc.getPageCount(), 2);
+});
+
 test('E-Book-Export liefert ein EPUB mit korrektem mimetype', async () => {
   const response = await post('/api/export/ebook.epub', { config });
   assert.equal(response.status, 200);

@@ -1,5 +1,5 @@
 /** Eingabe-Validierung ohne externe Abhängigkeit. */
-import { PAGE_LIMITS, TRIM_SIZES } from './kdp.mjs';
+import { DEFAULT_MARKETPLACE, PAGE_LIMITS, PRINT_PRICING, TRIM_SIZES } from './kdp.mjs';
 import { GENERATORS, NICHE_PACKS } from './niches.mjs';
 
 const PAPERS = ['white', 'cream', 'color'];
@@ -62,6 +62,11 @@ export function validateBookConfig(input = {}) {
   config.paper = input.paper ?? 'white';
   if (!PAPERS.includes(config.paper)) errors.push('Papierart muss white, cream oder color sein.');
   if (config.paper === 'color') errors.push('Papierart "color" ist nicht verfügbar: Die Buchmaschine erzeugt Schwarzweiß-Innenleben.');
+
+  config.marketplace = input.marketplace ?? DEFAULT_MARKETPLACE;
+  if (!PRINT_PRICING[config.marketplace]) {
+    errors.push(`Unbekannter Marktplatz: ${input.marketplace}`);
+  }
 
   config.seed = typeof input.seed === 'string' && input.seed.trim() ? input.seed.trim().slice(0, 64) : 'buchmaschine-1';
 
