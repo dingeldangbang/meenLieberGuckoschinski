@@ -7,6 +7,12 @@ name: Publishing Pipeline
 # hintereinander, danach folgt eine Pause von bis zu drei Tagen. Zwei feste
 # Wochentage sind vorhersagbar, laufen nie doppelt und bleiben weit unter jeder
 # Plattform-Drosselung.
+#
+# Achtung, echter Stolperstein: In einem ÖFFENTLICHEN Repository schaltet GitHub
+# geplante Workflows nach 60 Tagen ohne Repository-Aktivität stillschweigend ab.
+# Dieses Repository ist öffentlich. Abhilfe: regelmäßig committen, den Workflow
+# im Actions-Tab wieder aktivieren (`gh workflow enable`) oder extern per
+# `workflow_dispatch` anstoßen.
 on:
   schedule:
     - cron: '0 4 * * 2,5'
@@ -40,6 +46,10 @@ jobs:
     env:
       # Secrets sind in `if`-Bedingungen nicht verfügbar, als Job-Env schon.
       GUMROAD_TOKEN: ${{ secrets.GUMROAD_TOKEN }}
+      # ISBN gehört dem Verlag und wird nie erzeugt: siehe scripts/lib/isbn.mjs.
+      BOOK_ISBN: ${{ secrets.BOOK_ISBN }}
+      PUBLISHER_NAME: ${{ secrets.PUBLISHER_NAME }}
+      DNB_HOTFOLDER: ${{ secrets.DNB_HOTFOLDER }}
 
     steps:
       - name: Checkout
@@ -80,16 +90,31 @@ jobs:
       - name: Quality gate on written artifacts
         run: node scripts/preflight_checker.mjs --all artifacts/manifest.json
 
+      # Schritt 5: ONIX 3.0 für den Buchhandel – nur mit gültiger, eigener ISBN.
+      # Ohne ISBN wird der Schritt übersprungen, nichts wird erfunden.
+      - name: Generate ONIX 3.0 metadata
+        if: env.BOOK_ISBN != ''
+        run: |
+          node scripts/onix.mjs \
+            --manifest artifacts/manifest.json \
+            --isbn "$BOOK_ISBN" \
+            --publisher "${PUBLISHER_NAME:-Selbstverlag}" \
+            --out artifacts/onix3.xml
+
+      # Schritt 6: Pflichtablieferung nach § 14 DNBG vorbereiten. Es gibt keine
+      # öffentliche DNB-API; erzeugt wird das Transferpaket, die Ablage im
+      # gemounteten Hotfolder erfolgt nur, wenn DNB_HOTFOLDER gesetzt ist.
+      - name: Build DNB legal deposit package
+        run: |
+          node scripts/legal_deposit.mjs \
+            --manifest artifacts/manifest.json \
+            --out artifacts/dnb \
+            --publisher "${PUBLISHER_NAME:-Selbstverlag}" \
+            ${BOOK_ISBN:+--isbn "$BOOK_ISBN"} \
+            ${DNB_HOTFOLDER:+--hotfolder "$DNB_HOTFOLDER"}
+
       - name: Show manifest summary
         run: |
-          node -e '
-            const m = require("./artifacts/manifest.json");
-            console.log(`Titel:      ${m.title}`);
-            console.log(`Seiten:     ${m.pageCount} (Parität ${m.parityRepaired ? "korrigiert" : "ok"})`);
-            console.log(`Cover:      ${m.geometry.widthIn} x ${m.geometry.heightIn} in, Rücken ${m.geometry.spineIn} in`);
-            console.log(`Tantieme:   ${m.priceEur} EUR Listenpreis`);
-            console.log(`Freigabe:   ${m.ok ? "ja" : "nein"}`);
-          '
           {
             echo "### Publishing-Pipeline"
             echo ""
@@ -110,7 +135,7 @@ jobs:
             '
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Schritt 5: Veröffentlichung. Läuft nur, wenn ein Token hinterlegt ist und
+      # Schritt 7: Veröffentlichung. Läuft nur, wenn ein Token hinterlegt ist und
       # der Lauf nicht ausdrücklich ohne Deploy gestartet wurde. Ohne Token wird
       # nichts veröffentlicht – es gibt keinen stillen Fallback.
       - name: Deploy to Gumroad

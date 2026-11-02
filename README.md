@@ -312,6 +312,8 @@ Ein GitHub-Actions-Workflow baut, prüft und veröffentlicht ohne Handarbeit:
 scripts/harvest_keywords.mjs   Nische aus dem Datum, 7 Keyword-Slots (live oder offline)
 scripts/build_package.mjs      Buchblock → Paritäts-Gate → Cover → Gate 2 → Manifest
 scripts/preflight_checker.mjs  unabhängige Nachprüfung: Cover-Drift ≤ 1 pt, gerade Seiten
+scripts/onix.mjs               ONIX 3.0 für den Buchhandel (nur mit eigener ISBN)
+scripts/legal_deposit.mjs      Pflichtablieferung § 14 DNBG: Transferpaket + Checkliste
 scripts/deploy_digital.mjs     Gumroad: Produkt anlegen/aktualisieren, PDF anhängen
 ```
 
@@ -333,8 +335,19 @@ npm run pipeline        # Harvest + Bau + Gate, lokal ohne Token
 npm run pipeline:dry-run
 ```
 
+- **Buchhandel:** `scripts/onix.mjs` erzeugt ONIX 3.0 mit ISBN-13, Maßen in mm,
+  Preis in EUR und Verkaufsrechten DE/AT/CH. Ohne gültige, **eigene** ISBN wird
+  nichts gemeldet – die Prüfziffer wird vorher geprüft (`scripts/lib/isbn.mjs`).
+- **Pflichtablieferung:** `scripts/legal_deposit.mjs` schnürt das DNB-Paket
+  (PDF + EPUB + Metadaten-Kernset + Checkliste). § 14 DNBG verlangt **zwei**
+  Druckexemplare, **ein** digitales, binnen einer Woche; die 25-Stück-Ausnahme
+  gilt nicht für Print-on-Demand. Die DNB hat keine Token-API – abgeliefert wird
+  über beantragten Hotfolder, OAI-PMH oder Webformular.
+
 > Warum Gumroad und nicht Payhip: Payhips öffentliche API kann nur Coupons und
 > Lizenzschlüssel verwalten – Produkte lassen sich dort nicht anlegen.
+> Creem kann Produkte per API anlegen, aber Datei-Downloads nur im Dashboard
+> aktivieren – ein Produkt ohne Datei wäre eine leere Seite, deshalb nicht eingebaut.
 
 ---
 
@@ -345,8 +358,11 @@ scripts/                            CI-Pipeline (Node, ohne Zusatzabhängigkeite
   harvest_keywords.mjs              Nischen-/Keyword-Ingestion
   build_package.mjs                 Paketbau mit beiden Gates + manifest.json
   preflight_checker.mjs             Standalone-Gate (Parität, Cover-Geometrie)
+  onix.mjs                          ONIX-3.0-Meldung für den Buchhandel
+  legal_deposit.mjs                 DNB-Pflichtablieferung als Transferpaket
   deploy_digital.mjs                Gumroad-Deployer (idempotent, token-sicher)
   lib/gates.mjs                     Paritäts- und Geometrie-Prüfungen
+  lib/isbn.mjs                      ISBN-Prüfung (Prüfziffer, Platzhalter)
 .github/workflows/
   publishing-pipeline.yml           Cron + workflow_dispatch, Artefakte, Deploy
 server/

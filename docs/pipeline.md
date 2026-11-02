@@ -18,6 +18,12 @@ scripts/build_package.mjs      Buchblock rendern → Paritäts-Gate (Vakatseite)
 scripts/preflight_checker.mjs  unabhängige Nachprüfung der Dateien auf der Platte
         │                       (Cover-Drift ≤ 1 pt, gerade Seitenzahl)
         ▼
+scripts/onix.mjs               ONIX 3.0 für den Buchhandel (nur mit eigener ISBN)
+        │                       → artifacts/onix3.xml
+        ▼
+scripts/legal_deposit.mjs      Pflichtablieferung § 14 DNBG: Transferpaket + Checkliste
+        │                       → artifacts/dnb/*
+        ▼
 scripts/deploy_digital.mjs     Gumroad: Produkt anlegen/aktualisieren, PDF anhängen
         │
         ▼
@@ -36,6 +42,54 @@ actions/upload-artifact        KDP-Paket 14 Tage gesichert
 Alle Sollwerte stammen aus einer einzigen Quelle: `server/lib/kdp.mjs`. Es gibt
 keine zweite, abweichende Zahlenquelle – die Rückenformel (`0,002252″` pro Blatt
 Weißpapier) wird im Gate gegen die Rohformel nachgerechnet (`spine-formula`).
+
+## Buchhandel und Pflichtablieferung
+
+### ONIX 3.0 (`scripts/onix.mjs`)
+
+Erzeugt eine ONIX-3.0-Nachricht mit einem Produkt: ISBN-13 (Typ 15), Produktform
+`BC`/`EB`, Maße in Millimetern (Höhe 228,6 / Breite 152,4 / Dicke aus der
+Papierstärke), Titel, Autor, Sprache `ger`, Umfang, Beschreibung, Verlag,
+Erscheinungsdatum, Verfügbarkeit, Preis (Typ 02, inkl. USt, EUR) und
+Verkaufsrechte für DE/AT/CH.
+
+Bewusste Grenzen:
+
+- **Nur das Kernset.** Reihen, Rechte- und Klappentexte, BISAC-Feinheiten und
+  mehrere Produkte pro Nachricht gehören in die Redaktion. Subject läuft über
+  `SubjectSchemeIdentifier 20` (freie Schlagworte), nicht über BISAC-Codes.
+- **Eine XSD-Validierung gegen die offizielle ONIX-3.0-Schema-Datei findet hier
+  nicht statt** (das Schema liegt auf `ns.editeur.org` und ist in der
+  Entwicklungsumgebung nicht abrufbar). Geprüft wird Wohlgeformtheit,
+  Elementreihenfolge nach ONIX-Konvention und die Codes aus `ONIX_CODES`.
+- **Ohne ISBN keine Meldung.** Die ISBN vergibt in Deutschland die ISBN-Agentur
+  (MVB) an den Verlag; sie ist nicht erfindbar. `scripts/lib/isbn.mjs` prüft
+  Prüfziffer und Format und lehnt Platzhalter ab. Ein „VLB-Gold-Status" ist eine
+  vertragliche Sache mit MVB und entsteht nicht durch ein XML.
+
+Beispiel: `node scripts/onix.mjs --manifest artifacts/manifest.json --isbn 9783161484100 --publisher "Verlag GmbH" --out artifacts/onix3.xml`
+
+### Pflichtablieferung DNB (`scripts/legal_deposit.mjs`)
+
+Rechtslage (§ 14 DNBG, geprüft):
+
+| Konstellation | Stückzahl | Frist |
+| --- | --- | --- |
+| Gedrucktes Buch (§ 14 Abs. 1) | **2 Ausfertigungen** | 1 Woche ab Verbreitung (§ 14 Abs. 4) |
+| E-Book/PDF (§ 14 Abs. 3) | **1 Ausfertigung** | dieselbe Frist |
+| Verstoß | – | Mahnung, +3 Wochen, Beschaffung auf Kosten des Pflichtigen; Bußgeld bis **10 000 €** (§ 19) |
+
+Die Ausnahme „unter 25 Stück" gilt **nicht** für Print-on-Demand – und genau das
+sind die Bücher dieser Pipeline.
+
+**Es gibt keine öffentliche DNB-API mit Bearer-Token.** Automatisiert wird über
+einen bei der DNB beantragten **Hotfolder** (SFTP/WebDAV) oder **OAI-PMH**, jeweils
+nach Registrierung und Testphase; für einzelne Monografien gibt es ein
+Webformular. Das Skript erzeugt deshalb das Transferpaket (PDF + EPUB +
+`metadaten.json` im Kernset + `ablieferung.md` mit Fristen) und legt es nur dann
+in einen Hotfolder, wenn `DNB_HOTFOLDER` auf ein gemountetes Verzeichnis zeigt.
+Ein gesetztes `DNB_ACCESS_TOKEN` wird ausdrücklich ignoriert und geloggt – es
+gibt keinen Endpunkt, an den es gehören würde.
 
 ## Ausgabe-Vertrag der Skripte
 
@@ -71,6 +125,9 @@ Repository.
 | Cron `0 4 */2 * *` | `0 4 * * 2,5` | `*/2` zählt Monatstage: am 31. und 1. laufen zwei Jobs direkt hintereinander, dann bis zu drei Tage Pause. Zwei feste Wochentage sind deterministisch. |
 | „3 Titel/24 h"-Guard | Idempotenz | Die Pipeline lädt nicht bei KDP hoch, sondern bei Gumroad. Schutz gegen Dubletten ist deshalb: existiert ein Produkt mit demselben Namen, wird es aktualisiert statt neu angelegt. |
 | CMYK als Pflicht | nicht erzwungen | KDP nimmt RGB-PDFs an und wandelt selbst; erzwungenes CMYK ohne Farbprofil wäre ein Risiko, kein Vorteil. |
+| `deploy_dnb.py` mit `DNB_ACCESS_TOKEN` + `DNB_API_URL` | Paketbau + Hotfolder-Ablage | Eine öffentliche DNB-API mit Token existiert nicht; Ablieferung läuft über beantragten Hotfolder, OAI-PMH oder Webformular. |
+| `--isbn "9783982000000"` fest im Workflow | ISBN aus Secret `BOOK_ISBN`, vorher geprüft | Die Zahl ist keine gültige ISBN: korrekte Prüfziffer wäre 8 (`9783982000008`) – und eine ISBN gehört immer dem Verlag, der sie erworben hat. |
+| **Creem** als dritter Kanal | nicht implementiert | Creems API (`POST /v1/products`, `x-api-key`) legt Produkte an, aber **Datei-Downloads werden im Dashboard aktiviert** – ein Produkt ohne Datei wäre eine leere Produktseite. Gumroad kann das per API. |
 | KI-generierter Fließtext | nicht Teil der Pipeline | Inhalt kommt aus den verifizierten Generatoren (Rätsel, Wortsuche, Labyrinthe, Journale); die KI-Offenlegung wird korrekt als „AI-assisted" ausgewiesen. |
 
 ## Betrieb und Fehlerfälle
@@ -84,8 +141,15 @@ Repository.
 | `Gumroad … HTTP 429` | Rate-Limit | Lauf wiederholen; bei zwei Läufen pro Woche praktisch ausgeschlossen |
 | `Manifest nicht freigabefähig` | Preflight/Gate/Compliance hat blockiert | Report im Artefakt lesen, Ursache beheben – nie das Gate umgehen |
 
-Kosten: 2 Läufe pro Woche × ca. 2 Minuten auf `ubuntu-latest` – weit innerhalb des
-Free-Tier-Kontingents von 2 000 Minuten/Monat für öffentliche Repositories.
+### Free-Tier-Rechnung für dieses Repository
+
+| Punkt | Fakt | Folge hier |
+| --- | --- | --- |
+| Minuten | 2 000 Linux-Minuten/Monat gelten für **private** Repos; **öffentliche** Repos sind unbegrenzt | Dieses Repo ist öffentlich → das Minutenbudget ist irrelevant. Zwei Läufe/Woche à ~2 min wären selbst privat nur ~16 min/Monat. |
+| Runner | `ubuntu-latest` = Faktor 1×; Windows 2×, macOS 10× | Nur Linux-Runner im Workflow. |
+| Artefakte | 500 MB Speicher im Free-Plan, `retention-days: 14` | Ein Paket wiegt ~1 MB; bei 2 Läufen/Woche bleibt es bei wenigen MB. |
+| **Cron-Falle** | In **öffentlichen** Repos deaktiviert GitHub geplante Workflows nach **60 Tagen ohne Repository-Aktivität** – stillschweigend | Betrifft dieses Repo. Abhilfe: regelmäßig committen, `gh workflow enable` ausführen oder extern per `workflow_dispatch` anstoßen. Private Repos sind von dieser Regel **nicht** betroffen (die Spezifikation hatte es umgekehrt). |
+| KDP-Drossel | KDP-Limits gelten für Uploads zu KDP | Diese Pipeline lädt nichts zu KDP hoch; der Deploy geht an Gumroad. Schutz gegen Dubletten ist die Idempotenz über den Produktnamen. |
 
 ## Lokal reproduzieren
 
