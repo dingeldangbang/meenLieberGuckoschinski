@@ -251,10 +251,23 @@ Nachfrage- und Wettbewerbswerte sind in beiden Fällen **Heuristiken**, keine ge
 ## Tests
 
 ```bash
-npm test
+npm test      # 164 Unit- und Vertragstests
+npm run verify  # vollständige Abnahme: Tests + Pipeline + echter HTTP-Server
 ```
 
-105 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
+`npm run verify` prüft in einem Lauf, was ein Nutzer tatsächlich merkt: Node-Version,
+`node --check` über alle Module, die komplette Testsuite, die Pipeline mit echten
+Bytes auf der Platte (Buchblock-PDF, Cover, EPUB, ONIX gegen XSD, DNB-Paket) und
+einen echten Serverprozess auf einem freien Port, dessen 19 Routen über HTTP
+abgefragt werden – PDFs und EPUB inklusive Dateisignatur. Fehlt ein optionales
+Werkzeug (z. B. XSD-Validator), steht das als `skip` mit Begründung im Bericht,
+nie als `ok`. Ergebnis: Exit-Code 0 oder 1 und `artifacts/verify-report.json`.
+
+Stand des letzten Laufs: **32 von 32 Prüfungen grün, 164 von 164 Tests grün**,
+zusätzlich in einem frischen Klon verifiziert. Protokoll und Grenzen:
+[`docs/abnahme.md`](docs/abnahme.md).
+
+164 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
 
 - **kdp** – Rückenformel, Beschnitt, Barcode-Zone, Ränder, Druckkostenstaffel, Tantiemensprung
   an der 9,99-€-Schwelle, Mindestpreis ≥ Druckkosten, Rückenbeschriftung ab 80 Seiten
@@ -273,6 +286,10 @@ npm test
   Netzwerkfehlern, Portfolio-Aggregation und Unterpreis-Warnungen
 - **api** – alle Endpunkte inkl. Fehlerfälle, Export-Dateinamen, EPUB-Download, Preflight, Compliance,
   Preisstaffel, Projekt-CRUD, Dashboard, Path-Traversal-Schutz
+- **isbn** – Prüfziffern nach ISBN-10 und ISBN-13, Konvertierung, Ablehnung von Platzhaltern
+- **onix** – Elementreihenfolge, `Supplier`-Composite, Preis vs. `UnpricedItemType`,
+  XSD-Validierung gegen ONIX 3.0 Revision 1
+- **legal_deposit** – DNB-Kernfelder, Paketinhalt, Hotfolder-Ablage, Checkliste
 
 ---
 
@@ -363,6 +380,7 @@ scripts/                            CI-Pipeline (Node, ohne Zusatzabhängigkeite
   preflight_checker.mjs             Standalone-Gate (Parität, Cover-Geometrie)
   onix.mjs                          ONIX-3.0-Meldung für den Buchhandel
   validate_onix.mjs                 XSD-Prüfung der ONIX-Meldung (ONIX 3.0 R1)
+  verify.mjs                        Abnahmelauf: Tests, Pipeline, echter HTTP-Server
   legal_deposit.mjs                 DNB-Pflichtablieferung als Transferpaket
   deploy_digital.mjs                Gumroad-Deployer (idempotent, token-sicher)
   lib/gates.mjs                     Paritäts- und Geometrie-Prüfungen
@@ -401,6 +419,8 @@ bin/buchmaschine.mjs        CLI: build, preflight, niches
 public/
   index.html, styles.css, app.js    Studio-Oberfläche (ohne Framework, ohne Build)
 tests/                              node:test-Suite (inkl. Pipeline- und Deployer-Vertragstests)
+docs/pipeline.md                    Pipeline, freie Kontingente, Abweichungen, Incident-Playbook
+docs/abnahme.md                     Abnahmeprotokoll: was geprüft wurde und was nicht
 ```
 
 ## Warum diese Grenzen?
