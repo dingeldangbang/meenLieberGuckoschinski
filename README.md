@@ -332,6 +332,13 @@ public/
 tests/                              node:test-Suite
 ```
 
+## Warum diese Grenzen?
+
+Die mitgelieferte Konzeptstudie (Typst + ReportLab, Cron-Veröffentlichung, KI-Texte, gescrapte
+Marktdaten) wird in [docs/kdp-engine-analyse.md](docs/kdp-engine-analyse.md) Punkt für Punkt geprüft:
+zwölf sachliche Fehler, vier offene Lücken (Marktdaten, Satzqualität, Bildstrecke, Betrieb) und
+die Begründung, was übernommen und was abgelehnt wurde.
+
 ## Lizenz
 
 Apache License 2.0 – siehe [LICENSE](LICENSE).
