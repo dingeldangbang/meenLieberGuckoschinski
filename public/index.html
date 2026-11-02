@@ -9,6 +9,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f0c987'/%3E%3Cpath d='M8 9h8a5 5 0 0 1 5 5v9a4 4 0 0 0-4-4H8z' fill='%23231c14'/%3E%3C/svg%3E" />
   </head>
   <body>
+    <a class="skip-link" href="#main">Zum Inhalt springen</a>
     <div class="app">
       <header class="topbar">
         <div class="brand">
@@ -25,7 +26,7 @@
         </div>
       </header>
 
-      <main class="layout">
+      <main class="layout" id="main" tabindex="-1">
         <section class="workspace" aria-label="Buch konfigurieren">
           <nav class="steps" aria-label="Schritte">
             <button class="step is-active" data-step="1" type="button"><span>1</span>Nische</button>
@@ -47,6 +48,7 @@
               <h3>Keyword-Werkstatt</h3>
               <p class="muted">Tippe einen Nischen-Stamm ein. Du bekommst lange Suchphrasen und kannst bis zu 7 in die KDP-Slots übernehmen.</p>
               <div class="row">
+                <label class="sr-only" for="kw-seed">Nischen-Stamm für die Keyword-Werkstatt</label>
                 <input id="kw-seed" type="text" placeholder="z. B. rätselbuch für senioren" autocomplete="off" />
                 <button class="btn" id="kw-build" type="button">Werkstatt</button>
                 <button class="btn primary" id="kw-live" type="button">Amazon live</button>
@@ -224,7 +226,7 @@
                   <span>lokal in data/projects.json</span>
                 </button>
               </div>
-              <p class="fineprint" id="export-note">Noch nichts exportiert.</p>
+              <p class="fineprint" id="export-note" role="status" aria-live="polite">Noch nichts exportiert.</p>
             </div>
 
             <div class="card">
@@ -313,6 +315,11 @@
         <div class="metrics" id="portfolio-metrics"></div>
         <div class="table-wrap"><table class="table" id="portfolio-table"></table></div>
         <p class="fineprint" id="portfolio-note"></p>
+      </div>
+      <div class="projects-toolbar">
+        <button class="btn ghost small" id="btn-import" type="button">Projekte importieren</button>
+        <input id="import-file" type="file" accept="application/json,.json" multiple class="sr-only" aria-label="Projektdateien zum Import auswählen" />
+        <p class="fineprint" id="import-note" role="status" aria-live="polite"></p>
       </div>
       <div id="projects-list" class="projects"></div>
     </dialog>

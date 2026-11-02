@@ -872,6 +872,37 @@ function wire() {
     $('#dlg-projects').showModal();
     loadProjects();
   });
+  $('#btn-import').addEventListener('click', () => $('#import-file').click());
+  $('#import-file').addEventListener('change', async (event) => {
+    const files = [...(event.target.files ?? [])];
+    if (!files.length) return;
+    const note = $('#import-note');
+    let imported = 0;
+    let skipped = 0;
+    const failures = [];
+    setStatus('importiere …', '');
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        const result = await api('/api/projects/import', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        imported += result.imported;
+        skipped += result.skipped;
+      } catch (error) {
+        failures.push(`${file.name}: ${error.message}`);
+      }
+    }
+    event.target.value = '';
+    note.textContent = failures.length
+      ? `${imported} importiert, ${failures.length} Datei(en) fehlgeschlagen – ${failures.join('; ')}`
+      : `${imported} Projekt(e) importiert${skipped ? `, ${skipped} übersprungen` : ''}.`;
+    setStatus('importiert', failures.length ? 'is-warn' : 'is-good');
+    loadProjects();
+  });
+
   $('#portfolio-sales').addEventListener('change', (event) => {
     const sales = Math.max(0, Number(event.target.value) || 0);
     loadPortfolio(sales);

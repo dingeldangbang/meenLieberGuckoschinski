@@ -60,3 +60,51 @@ export async function getProject(id) {
   const projects = await readAll();
   return projects.find((p) => p.id === id) ?? null;
 }
+
+/**
+ * Importiert Projekte aus einer zuvor exportierten JSON-Datei.
+ *
+ * Akzeptiert drei Formen, weil alle drei im Umlauf sind:
+ *   - ein einzelnes Projekt `{ name, config }`
+ *   - ein Array von Projekten
+ *   - das Dashboard-Format `{ projects: [...] }`
+ *
+ * Der Import ist idempotent über `id`: existiert die ID schon, wird der Datensatz
+ * aktualisiert statt verdoppelt. Einträge ohne `config` werden übersprungen und
+ * im Ergebnis gemeldet – lieber eine klare Zahl als ein halber Import.
+ */
+export async function importProjects(payload, { overwrite = true } = {}) {
+  const raw = Array.isArray(payload) ? payload : payload?.projects ?? [payload];
+  const candidates = raw.filter((entry) => entry && typeof entry === 'object' && entry.config);
+  const existing = await readAll();
+  const byId = new Map(existing.map((project) => [project.id, project]));
+  const now = new Date().toISOString();
+
+  const imported = [];
+  let skipped = raw.length - candidates.length;
+
+  for (const entry of candidates) {
+    const id = typeof entry.id === 'string' && entry.id ? entry.id : crypto.randomUUID();
+    const current = byId.get(id);
+    if (current && !overwrite) {
+      skipped += 1;
+      continue;
+    }
+    const record = {
+      id,
+      name: String(entry.name || entry.config?.title || 'Unbenannt').slice(0, 120),
+      config: entry.config,
+      createdAt: current?.createdAt ?? entry.createdAt ?? now,
+      updatedAt: now,
+    };
+    byId.set(id, record);
+    imported.push(record);
+  }
+
+  if (imported.length) {
+    const next = [...byId.values()].slice(-MAX_PROJECTS);
+    await writeAll(next);
+  }
+
+  return { imported: imported.length, skipped, projects: imported };
+}

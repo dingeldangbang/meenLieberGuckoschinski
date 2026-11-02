@@ -329,6 +329,67 @@ async function checkServer() {
       const ok = status === 200 && bytes > 0 && signatureOk;
       record(currentStage, `${method} ${route.split('?')[0]}`, ok ? 'ok' : 'fail', `${status} · ${bytes} B`);
     }
+
+    /* ---------------------- Härtung und Kleinigkeiten --------------------- */
+
+    const home = await fetch(base + '/');
+    const csp = home.headers.get('content-security-policy') ?? '';
+    record(
+      currentStage,
+      'Sicherheits-Header (CSP, nosniff, Referrer)',
+      csp.includes("default-src 'self'") &&
+        home.headers.get('x-content-type-options') === 'nosniff' &&
+        home.headers.get('referrer-policy') === 'no-referrer'
+        ? 'ok'
+        : 'fail',
+      csp ? 'CSP gesetzt' : 'keine CSP',
+    );
+
+    const missing = await fetch(base + '/gibtsnicht.js');
+    record(
+      currentStage,
+      'Fehlende Datei liefert 404 (kein HTML mit 200)',
+      missing.status === 404 ? 'ok' : 'fail',
+      `Status ${missing.status}`,
+    );
+
+    const head = await fetch(base + '/', { method: 'HEAD' });
+    const headBody = await head.text();
+    record(
+      currentStage,
+      'HEAD antwortet ohne Body',
+      head.status === 200 && headBody === '' ? 'ok' : 'fail',
+      `Status ${head.status}`,
+    );
+
+    const style = await fetch(base + '/styles.css');
+    const etag = style.headers.get('etag');
+    const cached = etag ? await fetch(base + '/styles.css', { headers: { 'If-None-Match': etag } }) : null;
+    record(
+      currentStage,
+      'ETag und 304 bei unverändertem Asset',
+      etag && cached?.status === 304 ? 'ok' : 'fail',
+      etag ? `ETag ${etag.slice(0, 14)}…` : 'kein ETag',
+    );
+
+    const robots = await fetch(base + '/robots.txt');
+    record(currentStage, 'robots.txt sperrt Crawler', robots.status === 200 ? 'ok' : 'fail');
+
+    const imported = await fetch(base + '/api/projects/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Abnahmeprojekt', config }),
+    });
+    const importBody = imported.status === 201 ? await imported.json() : { imported: 0 };
+    record(
+      currentStage,
+      'Projekt-Import über die API',
+      imported.status === 201 && importBody.imported === 1 ? 'ok' : 'fail',
+      `Status ${imported.status}`,
+    );
+
+    const epub = await fetch(base + '/api/export/ebook.epub', json({ config }));
+    record(currentStage, 'EPUB weiterhin abrufbar', epub.status === 200 ? 'ok' : 'fail');
   } finally {
     child.kill('SIGTERM');
     await new Promise((resolve) => setTimeout(resolve, 200));

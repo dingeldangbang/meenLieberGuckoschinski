@@ -1,6 +1,6 @@
 # Abnahme
 
-Stand: 2. November 2026 · Commit `d2055f2` · Branch `arena/82eb4e86-meenlieberguckoschinski`
+Stand: 2. November 2026 · Branch `arena/82eb4e86-meenlieberguckoschinski` · Branch `arena/82eb4e86-meenlieberguckoschinski`
 
 Dieses Dokument beschreibt, **wie** geprüft wurde und **was** dabei herauskam.
 Alles hier ist mit einem Befehl reproduzierbar:
@@ -20,19 +20,19 @@ Der maschinenlesbare Bericht landet in `artifacts/verify-report.json`.
 |---|---|---|
 | 1. Umgebung (Node ≥ 20, Abhängigkeiten) | 2 | ok |
 | 2. Syntax (`node --check` über alle Module) | 1 (48 Dateien) | ok |
-| 3. Testsuite (`node:test`) | 1 (164 Tests) | ok |
+| 3. Testsuite (`node:test`) | 1 (203 Tests) | ok |
 | 4. Pipeline (Harvest → Bau → Gate → ONIX+XSD → DNB) | 11 | ok |
-| 5. HTTP-Server (19 Routen) | 19 | ok |
+| 5. HTTP-Server und Härtung (19 Routen + 7 Prüfungen) | 26 | ok |
 | 6. Bericht | 1 | ok |
 
-**Gesamt: 32 von 32 Prüfungen grün, 164 von 164 Tests grün, 0 übersprungen.**
+**Gesamt: 39 von 39 Prüfungen grün, 203 von 203 Tests grün, 0 übersprungen.**
 
 ### Zwei Umgebungen, zwei Läufe
 
 | Umgebung | Ergebnis |
 |---|---|
-| Frischer Klon, nur `npm ci`, **ohne** XSD-Validator | 31 ok · 1 übersprungen · 0 Fehler |
-| Frischer Klon mit `python3-lxml` | 32 ok · 0 übersprungen · 0 Fehler |
+| Frischer Klon, nur `npm ci`, **ohne** XSD-Validator | 38 ok · 1 übersprungen · 0 Fehler |
+| Frischer Klon mit `python3-lxml` | 39 ok · 0 übersprungen · 0 Fehler |
 
 Der Unterschied ist Absicht: ohne Validator wird der XSD-Schritt als
 `skip` mit Begründung geführt, **niemals** als `ok`. So lügt der Bericht nicht,

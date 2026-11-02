@@ -74,6 +74,25 @@ test('EPUB: Pflichtdateien und Paketdokument sind vorhanden', () => {
   assert.match(opf, /property="dcterms:modified"/);
 });
 
+test('EPUB: Metadaten zur Barrierefreiheit sind vollständig (EPUB Accessibility 1.1)', () => {
+  const opf = readZipEntry(buildEpub(planFor()), 'OEBPS/content.opf').toString();
+
+  for (const property of [
+    'schema:accessMode',
+    'schema:accessModeSufficient',
+    'schema:accessibilityFeature',
+    'schema:accessibilityHazard',
+    'schema:accessibilitySummary',
+  ]) {
+    assert.match(opf, new RegExp(`property="${property}"`), `${property} fehlt`);
+  }
+  assert.match(opf, /<meta property="schema:accessMode">textual<\/meta>/);
+  assert.match(opf, /<meta property="schema:accessibilityFeature">structuralNavigation<\/meta>/);
+  assert.match(opf, /<meta property="schema:accessibilityFeature">tableOfContents<\/meta>/);
+  assert.match(opf, /<meta property="schema:accessibilityHazard">none<\/meta>/);
+  assert.doesNotMatch(opf, /property="schema:accessibilityHazard">[^n]/, 'Hazard muss "none" sein');
+});
+
 test('EPUB: jedes Spine-Element hat ein Manifest-Item', () => {
   const epub = buildEpub(planFor());
   const opf = readZipEntry(epub, 'OEBPS/content.opf').toString();

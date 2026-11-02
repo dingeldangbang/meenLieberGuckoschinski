@@ -15,7 +15,7 @@ import { buildEpub } from './lib/epub.mjs';
 import { expandAlphabet, keywordResearch } from './lib/suggest.mjs';
 import { CATEGORIES, estimateFromRank, rankForSales } from './lib/bsr.mjs';
 import { buildPortfolio } from './lib/portfolio.mjs';
-import { listProjects, saveProject, deleteProject } from './lib/store.mjs';
+import { listProjects, saveProject, deleteProject, importProjects } from './lib/store.mjs';
 import { preflightPdf } from './lib/preflight.mjs';
 import { complianceReport, KNOWN_TRADEMARKS, HYPE_WORDS, GENERIC_TERMS } from './lib/policy.mjs';
 import { renderMetadataSheet } from './lib/pdf/metadata-sheet.mjs';
@@ -37,6 +37,64 @@ const MIME = {
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
 };
+
+/**
+ * Sicherheits-Header für jede Antwort.
+ *
+ * Bewusst **ohne** `X-Frame-Options` und ohne `frame-ancestors`: die App wird in
+ * einer Vorschau-Umgebung in einem iframe angezeigt, ein Framing-Verbot würde
+ * sie unbrauchbar machen. Alles andere bleibt strikt: kein Fremdskript, kein
+ * Objekt-Plugin, keine Formularziele nach außen.
+ */
+export const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Permissions-Policy': 'geolocation=(), camera=(), microphone=(), payment=()',
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; '),
+};
+
+export function applySecurityHeaders(res) {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value);
+}
+
+/* ------------------------------ Rate-Limit ------------------------------- */
+
+/**
+ * Einfaches Sliding-Window pro Client-IP für die teuren Routen. PDF-Rendern
+ * kostet Sekunden; ohne Grenze kann ein einzelner Client den Server blockieren.
+ * Absichtlich im Prozessspeicher: kein Redis, keine Cloud, keine Kosten.
+ */
+const RATE_LIMIT = { windowMs: 60_000, max: 120 };
+const rateBuckets = new Map();
+
+export function rateLimit(key, now = Date.now()) {
+  const bucket = rateBuckets.get(key) ?? [];
+  const fresh = bucket.filter((stamp) => now - stamp < RATE_LIMIT.windowMs);
+  if (fresh.length >= RATE_LIMIT.max) {
+    rateBuckets.set(key, fresh);
+    return { allowed: false, retryAfter: Math.ceil((RATE_LIMIT.windowMs - (now - fresh[0])) / 1000) };
+  }
+  fresh.push(now);
+  rateBuckets.set(key, fresh);
+  return { allowed: true, remaining: RATE_LIMIT.max - fresh.length };
+}
+
+/** Nur für Tests: Zähler zurücksetzen. */
+export function resetRateLimit() {
+  rateBuckets.clear();
+}
+
+const RATE_LIMITED_PREFIXES = ['/api/export/', '/api/preflight', '/api/preview'];
 
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -395,6 +453,20 @@ async function handleApi(req, res, url) {
     return sendJson(res, 201, { project: record });
   }
 
+  if (pathname === '/api/projects/import' && req.method === 'POST') {
+    const body = await readBody(req);
+    const payload = body.projects ?? body;
+    if (!payload || (typeof payload !== 'object')) {
+      return sendJson(res, 400, { error: 'Import erwartet ein Projekt, ein Array oder { projects: [...] }' });
+    }
+    const result = await importProjects(payload, { overwrite: body.overwrite !== false });
+    return sendJson(res, result.imported ? 201 : 200, {
+      imported: result.imported,
+      skipped: result.skipped,
+      projects: result.projects.map((project) => ({ id: project.id, name: project.name })),
+    });
+  }
+
   if (pathname.startsWith('/api/projects/') && req.method === 'DELETE') {
     const id = pathname.split('/').pop();
     const removed = await deleteProject(id);
@@ -405,31 +477,86 @@ async function handleApi(req, res, url) {
   return sendJson(res, 404, { error: 'Unbekannter API-Endpunkt' });
 }
 
+function sendText(res, status, text, extra = {}) {
+  const body = Buffer.from(text, 'utf8');
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Length': body.length,
+    'Cache-Control': 'no-store',
+    ...extra,
+  });
+  res.end(res.req?.method === 'HEAD' ? undefined : body);
+}
+
+/** Stabiler ETag aus Größe und Änderungszeit – kein Hash über die Bytes nötig. */
+function etagFor(stat, data) {
+  return `W/"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}-${data.length.toString(16)}"`;
+}
+
 async function serveStatic(req, res, url) {
-  let pathname = decodeURIComponent(url.pathname);
-  if (pathname === '/') pathname = '/index.html';
-  const filePath = path.resolve(PUBLIC_DIR, `.${pathname}`);
-  if (!filePath.startsWith(PUBLIC_DIR)) {
-    res.writeHead(403).end('Zugriff verweigert');
-    return;
-  }
+  let pathname;
   try {
-    const data = await fs.readFile(filePath);
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] ?? 'application/octet-stream',
-      'Content-Length': data.length,
-      'Cache-Control': 'no-cache',
-    });
-    res.end(data);
+    pathname = decodeURIComponent(url.pathname);
   } catch {
-    // SPA-Fallback für unbekannte Pfade
+    return sendText(res, 400, 'Ungültiger Pfad');
+  }
+  if (pathname === '/') pathname = '/index.html';
+
+  if (pathname === '/robots.txt') {
+    // Lokale Anwendung: es gibt nichts zu indexieren.
+    return sendText(res, 200, 'User-agent: *\nDisallow: /\n', { 'Content-Type': 'text/plain; charset=utf-8' });
+  }
+  // Browser fragen /favicon.ico unabhängig vom <link rel="icon"> an.
+  if (pathname === '/favicon.ico') {
+    res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' });
+    return res.end();
+  }
+
+  const filePath = path.resolve(PUBLIC_DIR, `.${pathname}`);
+  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
+    return sendText(res, 403, 'Zugriff verweigert');
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+
+  try {
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) throw Object.assign(new Error('keine Datei'), { code: 'ENOENT' });
+    const data = await fs.readFile(filePath);
+    const etag = etagFor(stat, data);
+    const isHtml = ext === '.html' || ext === '';
+
+    const headers = {
+      'Content-Type': MIME[ext] ?? 'application/octet-stream',
+      // HTML muss revalidieren, alles andere darf kurz zwischengespeichert werden.
+      'Cache-Control': isHtml ? 'no-cache' : 'public, max-age=300, must-revalidate',
+      ETag: etag,
+    };
+
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, headers);
+      return res.end();
+    }
+
+    headers['Content-Length'] = data.length;
+    res.writeHead(200, headers);
+    return res.end(req.method === 'HEAD' ? undefined : data);
+  } catch {
+    // Fehlende Datei mit Endung ist ein Fehler, kein SPA-Pfad: sonst bekäme
+    // der Browser HTML mit Status 200 für ein fehlendes Skript.
+    if (ext && ext !== '.html') {
+      return sendText(res, 404, 'Nicht gefunden');
+    }
     try {
       const fallback = await fs.readFile(path.join(PUBLIC_DIR, 'index.html'));
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(fallback);
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': fallback.length,
+        'Cache-Control': 'no-cache',
+      });
+      return res.end(req.method === 'HEAD' ? undefined : fallback);
     } catch {
-      res.writeHead(404).end('Nicht gefunden');
+      return sendText(res, 404, 'Nicht gefunden');
     }
   }
 }
@@ -437,8 +564,21 @@ async function serveStatic(req, res, url) {
 export function createServer() {
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
+    applySecurityHeaders(res);
     try {
       if (url.pathname.startsWith('/api/')) {
+        if (RATE_LIMITED_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
+          const key = `${req.socket.remoteAddress ?? 'unbekannt'}:${url.pathname.split('/').slice(0, 3).join('/')}`;
+          const limit = rateLimit(key);
+          if (!limit.allowed) {
+            res.setHeader('Retry-After', String(limit.retryAfter));
+            return sendJson(res, 429, {
+              error: 'Zu viele Anfragen',
+              details: `Höchstens ${RATE_LIMIT.max} Anfragen pro Minute auf dieser Route.`,
+            });
+          }
+          res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
+        }
         await handleApi(req, res, url);
       } else if (req.method === 'GET' || req.method === 'HEAD') {
         await serveStatic(req, res, url);

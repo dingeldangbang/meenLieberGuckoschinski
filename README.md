@@ -251,7 +251,7 @@ Nachfrage- und Wettbewerbswerte sind in beiden Fällen **Heuristiken**, keine ge
 ## Tests
 
 ```bash
-npm test      # 164 Unit- und Vertragstests
+npm test      # 203 Unit- und Vertragstests
 npm run verify  # vollständige Abnahme: Tests + Pipeline + echter HTTP-Server
 ```
 
@@ -263,11 +263,11 @@ abgefragt werden – PDFs und EPUB inklusive Dateisignatur. Fehlt ein optionales
 Werkzeug (z. B. XSD-Validator), steht das als `skip` mit Begründung im Bericht,
 nie als `ok`. Ergebnis: Exit-Code 0 oder 1 und `artifacts/verify-report.json`.
 
-Stand des letzten Laufs: **32 von 32 Prüfungen grün, 164 von 164 Tests grün**,
+Stand des letzten Laufs: **39 von 39 Prüfungen grün, 203 von 203 Tests grün**,
 zusätzlich in einem frischen Klon verifiziert. Protokoll und Grenzen:
 [`docs/abnahme.md`](docs/abnahme.md).
 
-164 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
+203 Tests mit `node:test`, ohne Test-Framework-Abhängigkeit:
 
 - **kdp** – Rückenformel, Beschnitt, Barcode-Zone, Ränder, Druckkostenstaffel, Tantiemensprung
   an der 9,99-€-Schwelle, Mindestpreis ≥ Druckkosten, Rückenbeschriftung ab 80 Seiten
@@ -290,6 +290,12 @@ zusätzlich in einem frischen Klon verifiziert. Protokoll und Grenzen:
 - **onix** – Elementreihenfolge, `Supplier`-Composite, Preis vs. `UnpricedItemType`,
   XSD-Validierung gegen ONIX 3.0 Revision 1
 - **legal_deposit** – DNB-Kernfelder, Paketinhalt, Hotfolder-Ablage, Checkliste
+- **server-hardening** – Sicherheits-Header, CSP, 404 statt HTML-Fallback, HEAD ohne Body,
+  ETag/304, robots.txt, Rate-Limit
+- **a11y** – Sprache, Überschriftenfolge, Skip-Link, Feldlabels, Button-Typen, Live-Regionen,
+  Kontrastrechnung nach WCAG AA
+- **frontend-budget** – Summe unter 200 KB gzip, keine Fremd-Hosts, kein Inline-Skript
+- **import** – Projekt-Import über Store und API, Idempotenz über die ID
 
 ---
 
@@ -307,6 +313,10 @@ zusätzlich in einem frischen Klon verifiziert. Protokoll und Grenzen:
   (`assets/fonts/OFL.txt`), Einbettung in Druckdateien ist ausdrücklich erlaubt. Fehlen die Dateien,
   fällt der Export auf die Standard-14-Schriften zurück – der Preflight markiert das dann als Fehler,
   weil KDP eingebettete Schriften verlangt.
+- **Der Server hat keine Anmeldung.** Er ist für `localhost` gedacht. Wer ihn ins LAN oder ins
+  Internet stellt, braucht einen Reverse-Proxy mit Authentifizierung davor; die Details stehen in
+  [`SECURITY.md`](SECURITY.md). Dafür sind CSP, Rate-Limit und Path-Traversal-Schutz eingebaut – aber
+  Authentifizierung ist bewusst nicht Teil der App, weil sie sonst Konten und damit Datenhaltung bräuchte.
 - **Kein automatischer Upload zu KDP.** Die App erzeugt Dateien und Text; das Einstellen bei Amazon
   bleibt ein bewusster, manueller Schritt. Automatisierte KDP-Uploads verstoßen gegen die Bedingungen.
   Die optionale CI-Pipeline veröffentlicht nur auf Gumroad, also auf einem eigenen Vertriebsweg.
@@ -421,6 +431,10 @@ public/
 tests/                              node:test-Suite (inkl. Pipeline- und Deployer-Vertragstests)
 docs/pipeline.md                    Pipeline, freie Kontingente, Abweichungen, Incident-Playbook
 docs/abnahme.md                     Abnahmeprotokoll: was geprüft wurde und was nicht
+docs/todo.md                        Bestandsaufnahme der fehlenden Teile mit Status
+SECURITY.md                         Bedrohungsmodell, Betriebsregeln, Meldeweg
+CONTRIBUTING.md                     Regeln für Beiträge, Schnellstart, Struktur
+CHANGELOG.md                        Änderungen, Versionen
 ```
 
 ## Warum diese Grenzen?

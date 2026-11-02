@@ -261,8 +261,14 @@ export function buildEpub(plan, options = {}) {
     <dc:publisher>Unabhängig veröffentlicht</dc:publisher>
     <dc:date>${date.toISOString().slice(0, 10)}</dc:date>
     <meta property="dcterms:modified">${modified}</meta>
+    <meta property="schema:accessModality">textual</meta>
+    <meta property="schema:accessMode">textual</meta>
+    <meta property="schema:accessModeSufficient">textual</meta>
     <meta property="schema:accessibilityFeature">tableOfContents</meta>
-    <meta property="schema:accessibilitySummary">Strukturierte Überschriften und ein navigierbares Inhaltsverzeichnis.</meta>
+    <meta property="schema:accessibilityFeature">structuralNavigation</meta>
+    <meta property="schema:accessibilityFeature">readingOrder</meta>
+    <meta property="schema:accessibilityHazard">none</meta>
+    <meta property="schema:accessibilitySummary">Durchgehend Text mit strukturellen Überschriften, linearem Lesefluss und navigierbarem Inhaltsverzeichnis. Keine Animation, kein Ton, keine Blitzlichteffekte.</meta>
   </metadata>
   <manifest>
     ${manifest}
