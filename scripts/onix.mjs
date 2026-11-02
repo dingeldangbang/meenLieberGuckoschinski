@@ -48,6 +48,9 @@ export const ONIX_CODES = {
   publishingRolePublisher: '01', // Liste 45
   publishingStatusActive: '04', // Liste 64
   publishingDatePublication: '01', // Liste 163
+  dateFormatYyyymmdd: '00', // Liste 55 – exaktes Datum YYYYMMDD
+  // Liste 57 – Pflicht, wenn kein <Price>-Element gesendet wird.
+  unpricedContactSupplier: '04',
   salesRightsForSale: '01', // Liste 46
   supplierRolePublisher: '01', // Liste 93
   productAvailabilityAvailable: '20', // Liste 65
@@ -242,11 +245,12 @@ export function buildOnix(book, options = {}) {
     `${p}  `,
   );
   publishing += element('PublishingStatus', ONIX_CODES.publishingStatusActive, `${p}  `);
+  // Reihenfolge laut Schema: PublishingDateRole, DateFormat (optional), Date.
   publishing += block(
     'PublishingDate',
     element('PublishingDateRole', ONIX_CODES.publishingDatePublication, `${p}    `)
-      + element('Date', onixDate(sentAt), `${p}    `)
-      + element('DateFormat', '00', `${p}    `),
+      + element('DateFormat', ONIX_CODES.dateFormatYyyymmdd, `${p}    `)
+      + element('Date', onixDate(sentAt), `${p}    `),
     `${p}  `,
   );
   publishing += block(
@@ -259,8 +263,13 @@ export function buildOnix(book, options = {}) {
 
   /* ------------------------------- Lieferweg ------------------------------- */
   let supply = '';
-  supply += element('SupplierRole', ONIX_CODES.supplierRolePublisher, `${p}    `);
-  supply += element('SupplierName', options.publisher, `${p}    `);
+  // SupplyDetail verlangt zwingend das Composite <Supplier> mit SupplierRole + SupplierName.
+  supply += block(
+    'Supplier',
+    element('SupplierRole', ONIX_CODES.supplierRolePublisher, `${p}      `)
+      + element('SupplierName', options.publisher, `${p}      `),
+    `${p}    `,
+  );
   supply += element('ProductAvailability', ONIX_CODES.productAvailabilityAvailable, `${p}    `);
   if (book.priceEur) {
     supply += block(
@@ -270,6 +279,11 @@ export function buildOnix(book, options = {}) {
         + element('CurrencyCode', options.currency ?? 'EUR', `${p}      `),
       `${p}    `,
     );
+  } else {
+    // <SupplyDetail> verlangt entweder <Price> oder <UnpricedItemType>.
+    // Code 04 „Contact supplier" ist laut Code List 57 genau für Bücher ohne
+    // empfohlenen Verkaufspreis in Broadcast-ONIX-Dateien vorgesehen.
+    supply += element('UnpricedItemType', ONIX_CODES.unpricedContactSupplier, `${p}    `);
   }
   xml += block(
     'ProductSupply',

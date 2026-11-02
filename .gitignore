@@ -9,3 +9,6 @@ artifacts/
 paket/
 *.pdf
 !docs/**/*.pdf
+
+# ONIX-XSD (wird bei Bedarf von EDItEUR-Spiegel geladen, nicht versioniert)
+.onix-schema/

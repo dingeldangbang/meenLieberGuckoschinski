@@ -101,6 +101,22 @@ jobs:
             --publisher "${PUBLISHER_NAME:-Selbstverlag}" \
             --out artifacts/onix3.xml
 
+      # Schritt 5b: Ergebnis gegen das offizielle ONIX-3.0-XSD prüfen.
+      # Das Schema wird gepinnt aus dem EDItEUR-Spiegel geholt (nicht
+      # versioniert), xmllint ist auf den Runnern vorhanden. Ohne gültiges
+      # Schema bricht der Lauf ab – eine ungeprüfte Datei ginge sonst an den
+      # Buchhandel.
+      - name: Validate ONIX against official XSD
+        if: env.BOOK_ISBN != ''
+        run: |
+          if ! command -v xmllint >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libxml2-utils
+          fi
+          node scripts/validate_onix.mjs \
+            --file artifacts/onix3.xml \
+            --schema-dir .onix-schema
+
       # Schritt 6: Pflichtablieferung nach § 14 DNBG vorbereiten. Es gibt keine
       # öffentliche DNB-API; erzeugt wird das Transferpaket, die Ablage im
       # gemounteten Hotfolder erfolgt nur, wenn DNB_HOTFOLDER gesetzt ist.

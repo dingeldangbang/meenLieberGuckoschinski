@@ -338,6 +338,9 @@ npm run pipeline:dry-run
 - **Buchhandel:** `scripts/onix.mjs` erzeugt ONIX 3.0 mit ISBN-13, Maßen in mm,
   Preis in EUR und Verkaufsrechten DE/AT/CH. Ohne gültige, **eigene** ISBN wird
   nichts gemeldet – die Prüfziffer wird vorher geprüft (`scripts/lib/isbn.mjs`).
+  Die Meldung wird gegen das offizielle ONIX-3.0-XSD validiert
+  (`scripts/validate_onix.mjs`, `npm run pipeline:onix:check`); dieses XSD hat drei
+  Reihenfolge-/Pflichtfeld-Fehler aufgedeckt, die jetzt als Tests abgesichert sind.
 - **Pflichtablieferung:** `scripts/legal_deposit.mjs` schnürt das DNB-Paket
   (PDF + EPUB + Metadaten-Kernset + Checkliste). § 14 DNBG verlangt **zwei**
   Druckexemplare, **ein** digitales, binnen einer Woche; die 25-Stück-Ausnahme
@@ -359,6 +362,7 @@ scripts/                            CI-Pipeline (Node, ohne Zusatzabhängigkeite
   build_package.mjs                 Paketbau mit beiden Gates + manifest.json
   preflight_checker.mjs             Standalone-Gate (Parität, Cover-Geometrie)
   onix.mjs                          ONIX-3.0-Meldung für den Buchhandel
+  validate_onix.mjs                 XSD-Prüfung der ONIX-Meldung (ONIX 3.0 R1)
   legal_deposit.mjs                 DNB-Pflichtablieferung als Transferpaket
   deploy_digital.mjs                Gumroad-Deployer (idempotent, token-sicher)
   lib/gates.mjs                     Paritäts- und Geometrie-Prüfungen

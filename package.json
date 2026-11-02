@@ -21,7 +21,10 @@
     "pipeline:dry-run": "node scripts/deploy_digital.mjs --manifest artifacts/manifest.json --dry-run",
     "pipeline": "node scripts/harvest_keywords.mjs --out artifacts/metadata.json && node scripts/build_package.mjs --config artifacts/metadata.json --out artifacts && node scripts/preflight_checker.mjs --all artifacts/manifest.json",
     "pipeline:onix": "node scripts/onix.mjs --manifest artifacts/manifest.json --out artifacts/onix3.xml",
-    "pipeline:dnb": "node scripts/legal_deposit.mjs --manifest artifacts/manifest.json --out artifacts/dnb"
+    "pipeline:dnb": "node scripts/legal_deposit.mjs --manifest artifacts/manifest.json --out artifacts/dnb",
+    "onix:schema": "node scripts/validate_onix.mjs --download-only --schema-dir .onix-schema",
+    "onix:validate": "node scripts/validate_onix.mjs --file artifacts/onix3.xml --schema-dir .onix-schema",
+    "pipeline:onix:check": "node scripts/onix.mjs --manifest artifacts/manifest.json --out artifacts/onix3.xml && node scripts/validate_onix.mjs --file artifacts/onix3.xml --schema-dir .onix-schema"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

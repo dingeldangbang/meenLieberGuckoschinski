@@ -19,6 +19,7 @@ scripts/preflight_checker.mjs  unabhängige Nachprüfung der Dateien auf der Pla
         │                       (Cover-Drift ≤ 1 pt, gerade Seitenzahl)
         ▼
 scripts/onix.mjs               ONIX 3.0 für den Buchhandel (nur mit eigener ISBN)
+scripts/validate_onix.mjs      XSD-Prüfung gegen ONIX 3.0 Revision 1
         │                       → artifacts/onix3.xml
         ▼
 scripts/legal_deposit.mjs      Pflichtablieferung § 14 DNBG: Transferpaket + Checkliste
@@ -58,16 +59,40 @@ Bewusste Grenzen:
 - **Nur das Kernset.** Reihen, Rechte- und Klappentexte, BISAC-Feinheiten und
   mehrere Produkte pro Nachricht gehören in die Redaktion. Subject läuft über
   `SubjectSchemeIdentifier 20` (freie Schlagworte), nicht über BISAC-Codes.
-- **Eine XSD-Validierung gegen die offizielle ONIX-3.0-Schema-Datei findet hier
-  nicht statt** (das Schema liegt auf `ns.editeur.org` und ist in der
-  Entwicklungsumgebung nicht abrufbar). Geprüft wird Wohlgeformtheit,
-  Elementreihenfolge nach ONIX-Konvention und die Codes aus `ONIX_CODES`.
+- **Die Ausgabe wird gegen das offizielle XSD validiert.** `scripts/validate_onix.mjs`
+  prüft jede Meldung gegen ONIX 3.0 Revision 1 (Namespace
+  `http://ns.editeur.org/onix/3.0/reference`). Das Schema (© EDItEUR) wird nicht
+  mitgeliefert, sondern zur Laufzeit über fest gepinnte Git-Blob-SHAs aus einem
+  öffentlichen Spiegel geholt (`npm run pipeline:onix:check`, Ablage `.onix-schema/`,
+  per `.gitignore` ausgeschlossen). Validator ist `xmllint --schema` oder Python mit
+  `lxml`; fehlt beides, endet das Skript mit Code 3 statt still „ok" zu sagen.
+  Die CI prüft den Schritt „Validate ONIX against official XSD" nach jeder Erzeugung.
+
+  Diese Prüfung hat drei echte Fehler gefunden, die ohne Schema niemand gesehen
+  hätte: `<DateFormat>` stand **nach** `<Date>` (richtig ist davor),
+  `<SupplyDetail>` enthielt flaches `<SupplierRole>` statt des Composites
+  `<Supplier>` mit `<SupplierRole>` + `<SupplierName>`, und ohne Preis fehlte das
+  Pflichtelement `<UnpricedItemType>` (Code 04 „Contact supplier", Code List 57 ist
+  genau dafür vorgesehen). Alle drei Fälle sind als Regressionstests in
+  `tests/onix-schema.test.mjs` festgehalten.
 - **Ohne ISBN keine Meldung.** Die ISBN vergibt in Deutschland die ISBN-Agentur
   (MVB) an den Verlag; sie ist nicht erfindbar. `scripts/lib/isbn.mjs` prüft
   Prüfziffer und Format und lehnt Platzhalter ab. Ein „VLB-Gold-Status" ist eine
   vertragliche Sache mit MVB und entsteht nicht durch ein XML.
 
-Beispiel: `node scripts/onix.mjs --manifest artifacts/manifest.json --isbn 9783161484100 --publisher "Verlag GmbH" --out artifacts/onix3.xml`
+Beispiel:
+
+```bash
+node scripts/onix.mjs --manifest artifacts/manifest.json --isbn 9783161484100 \
+  --publisher "Verlag GmbH" --out artifacts/onix3.xml
+npm run onix:schema          # holt nur das XSD nach .onix-schema/
+npm run onix:validate        # prüft artifacts/onix3.xml
+npm run pipeline:onix:check  # erzeugt neu und prüft in einem Schritt
+# {"ok":true,"validator":"xmllint","file":".../onix3.xml"}
+```
+
+Exit-Codes von `validate_onix.mjs`: `0` gültig, `1` ungültig, `2` Aufruf- oder
+Downloadfehler, `3` kein Validator installiert.
 
 ### Pflichtablieferung DNB (`scripts/legal_deposit.mjs`)
 
