@@ -34,7 +34,9 @@ Es gibt keine Anmeldung, keine API-Keys, keine Cloud. Alles läuft auf deinem Re
 kommt, fliegt bei Amazon regelmäßig raus und bringt keine Rezensionen. Struktur, Übungen und
 Reflexionsfragen liefert die App – den Text schreibst du. Genau dafür sind die Schreiblinien da.
 
-**Kein Auto-Upload.** Ein Klick zum Veröffentlichen ist keine Automatisierung, sondern ein Risiko.
+**Kein Auto-Upload bei KDP.** Der Upload zu Amazon bleibt ein bewusster Klick – automatisierte
+KDP-Uploads verstoßen gegen die Bedingungen. Für den *eigenen* Digital-Vertrieb (Gumroad) gibt es
+dagegen eine echte API; dorthin darf die Pipeline autonom veröffentlichen, wenn du ein Token hinterlegst.
 
 ---
 
@@ -288,8 +290,12 @@ npm test
   (`assets/fonts/OFL.txt`), Einbettung in Druckdateien ist ausdrücklich erlaubt. Fehlen die Dateien,
   fällt der Export auf die Standard-14-Schriften zurück – der Preflight markiert das dann als Fehler,
   weil KDP eingebettete Schriften verlangt.
-- **Kein automatischer Upload.** Die App erzeugt Dateien und Text; das Einstellen bei KDP bleibt ein
-  bewusster, manueller Schritt. Automatisierte Uploads verstoßen gegen die KDP-Bedingungen.
+- **Kein automatischer Upload zu KDP.** Die App erzeugt Dateien und Text; das Einstellen bei Amazon
+  bleibt ein bewusster, manueller Schritt. Automatisierte KDP-Uploads verstoßen gegen die Bedingungen.
+  Die optionale CI-Pipeline veröffentlicht nur auf Gumroad, also auf einem eigenen Vertriebsweg.
+- **Der Gumroad-Deploy ist gegen die dokumentierten Endpunkte gebaut, nicht live verifiziert.** Ohne
+  Token lief er nie gegen das echte Konto; die Vertragstests prüfen Produktanlage, Idempotenz,
+  Datei-Upload und den Presign-Fallback gegen eine Attrappe. Der erste echte Lauf gehört beobachtet.
 - **Das E-Book hat Grenzen.** Rätsel und Labyrinthe im EPUB sind für kleine Displays gedacht; für
   Puzzle-Bücher bleibt das Taschenbuch das bessere Produkt. Ein Titelbild (JPG/PNG) musst du im
   KDP-Dashboard separat hochladen – EPUB und Cover-PDF sind dort zwei verschiedene Uploads.
@@ -298,9 +304,51 @@ npm test
 
 ---
 
+## Autonome Publishing-Pipeline (CI)
+
+Ein GitHub-Actions-Workflow baut, prüft und veröffentlicht ohne Handarbeit:
+
+```
+scripts/harvest_keywords.mjs   Nische aus dem Datum, 7 Keyword-Slots (live oder offline)
+scripts/build_package.mjs      Buchblock → Paritäts-Gate → Cover → Gate 2 → Manifest
+scripts/preflight_checker.mjs  unabhängige Nachprüfung: Cover-Drift ≤ 1 pt, gerade Seiten
+scripts/deploy_digital.mjs     Gumroad: Produkt anlegen/aktualisieren, PDF anhängen
+```
+
+- Takt: **Di + Fr, 04:00 UTC** (`0 4 * * 2,5`). Bewusst nicht `0 4 */2 * *`, weil
+  Cron dort Monatstage zählt – am 31. und 1. liefen zwei Jobs direkt hintereinander.
+- Self-Healing: ungerade Seitenzahl → echte Vakatseite wird angehängt, die
+  korrigierte Zahl fließt in Cover und Manifest.
+- Fail-Closed: Cover-Drift über 1 pt, Preflight-Fehler oder Compliance-Blocker
+  beenden den Lauf, **bevor** etwas veröffentlicht wird.
+- Idempotent: existiert schon ein Produkt mit demselben Namen, wird es
+  aktualisiert statt dupliziert.
+- Ohne `GUMROAD_TOKEN` endet der Lauf mit dem KDP-Paket als Artefakt (14 Tage) und
+  sichtbarem Skip-Status – kein Schlüssel im Repo, kein stiller Fallback.
+
+Details, Abweichungen von der Vorlage und Incident-Playbook: [`docs/pipeline.md`](docs/pipeline.md).
+
+```bash
+npm run pipeline        # Harvest + Bau + Gate, lokal ohne Token
+npm run pipeline:dry-run
+```
+
+> Warum Gumroad und nicht Payhip: Payhips öffentliche API kann nur Coupons und
+> Lizenzschlüssel verwalten – Produkte lassen sich dort nicht anlegen.
+
+---
+
 ## Projektstruktur
 
 ```
+scripts/                            CI-Pipeline (Node, ohne Zusatzabhängigkeiten)
+  harvest_keywords.mjs              Nischen-/Keyword-Ingestion
+  build_package.mjs                 Paketbau mit beiden Gates + manifest.json
+  preflight_checker.mjs             Standalone-Gate (Parität, Cover-Geometrie)
+  deploy_digital.mjs                Gumroad-Deployer (idempotent, token-sicher)
+  lib/gates.mjs                     Paritäts- und Geometrie-Prüfungen
+.github/workflows/
+  publishing-pipeline.yml           Cron + workflow_dispatch, Artefakte, Deploy
 server/
   index.mjs                 HTTP-Server, API, statische Auslieferung
   lib/
@@ -332,7 +380,7 @@ assets/fonts/               EB Garamond (SIL Open Font License 1.1) + OFL.txt
 bin/buchmaschine.mjs        CLI: build, preflight, niches
 public/
   index.html, styles.css, app.js    Studio-Oberfläche (ohne Framework, ohne Build)
-tests/                              node:test-Suite
+tests/                              node:test-Suite (inkl. Pipeline- und Deployer-Vertragstests)
 ```
 
 ## Warum diese Grenzen?

@@ -5,3 +5,7 @@ data/
 .cache/
 .arena/
 .env
+artifacts/
+paket/
+*.pdf
+!docs/**/*.pdf

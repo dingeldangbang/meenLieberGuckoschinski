@@ -1,0 +1,153 @@
+name: Publishing Pipeline
+
+# Takt: Dienstag und Freitag, 04:00 UTC.
+#
+# Warum nicht `0 4 */2 * *` ("jeden 2. Tag")? Cron zählt bei `*/2` die Tage im
+# Monat, nicht einen 48-Stunden-Takt: Am 31. und am 1. laufen zwei Jobs direkt
+# hintereinander, danach folgt eine Pause von bis zu drei Tagen. Zwei feste
+# Wochentage sind vorhersagbar, laufen nie doppelt und bleiben weit unter jeder
+# Plattform-Drosselung.
+on:
+  schedule:
+    - cron: '0 4 * * 2,5'
+  workflow_dispatch:
+    inputs:
+      niche:
+        description: 'Nischen-ID (leer = automatisch aus dem Datum)'
+        required: false
+        type: string
+      skip_deploy:
+        description: 'Nur bauen, nicht veröffentlichen'
+        required: false
+        type: boolean
+        default: false
+      price_cents:
+        description: 'Preis in Cent (leer = aus dem Manifest)'
+        required: false
+        type: string
+
+concurrency:
+  group: publishing-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-verify-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Secrets sind in `if`-Bedingungen nicht verfügbar, als Job-Env schon.
+      GUMROAD_TOKEN: ${{ secrets.GUMROAD_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (Regressionsschutz vor dem Bau)
+        run: npm test
+
+      # Schritt 1: Ingestion. Fällt Amazon aus, entstehen die Slots aus den
+      # kuratierten Nischen-Paketen – der Lauf scheitert deshalb nicht.
+      - name: Harvest niche and keywords
+        id: harvest
+        run: |
+          node scripts/harvest_keywords.mjs \
+            --date "$(date -u +%F)" \
+            ${INPUT_NICHE:+--niche "$INPUT_NICHE"} \
+            --out artifacts/metadata.json
+        env:
+          INPUT_NICHE: ${{ inputs.niche }}
+
+      # Schritt 2+3: Buchblock bauen, Parität erzwingen (Vakatseite), Cover mit
+      # der korrigierten Seitenzahl rendern, Gate 2 und Preflight ausführen.
+      - name: Build package (interior, parity gate, cover, preflight)
+        run: |
+          node scripts/build_package.mjs --config artifacts/metadata.json --out artifacts
+
+      # Schritt 4: Unabhängige Nachprüfung der Bytes, wie sie auf der Platte
+      # liegen. Exit 1 bei Cover-Drift über 1 pt oder verletzter Parität.
+      - name: Quality gate on written artifacts
+        run: node scripts/preflight_checker.mjs --all artifacts/manifest.json
+
+      - name: Show manifest summary
+        run: |
+          node -e '
+            const m = require("./artifacts/manifest.json");
+            console.log(`Titel:      ${m.title}`);
+            console.log(`Seiten:     ${m.pageCount} (Parität ${m.parityRepaired ? "korrigiert" : "ok"})`);
+            console.log(`Cover:      ${m.geometry.widthIn} x ${m.geometry.heightIn} in, Rücken ${m.geometry.spineIn} in`);
+            console.log(`Tantieme:   ${m.priceEur} EUR Listenpreis`);
+            console.log(`Freigabe:   ${m.ok ? "ja" : "nein"}`);
+          '
+          {
+            echo "### Publishing-Pipeline"
+            echo ""
+            echo "| Feld | Wert |"
+            echo "| --- | --- |"
+            node -e '
+              const m = require("./artifacts/manifest.json");
+              const rows = [
+                ["Titel", m.title],
+                ["Seiten", `${m.pageCount}${m.parityRepaired ? " (Vakatseite ergänzt)" : ""}`],
+                ["Cover", `${m.geometry.widthIn} × ${m.geometry.heightIn} in`],
+                ["Rücken", `${m.geometry.spineIn} in`],
+                ["Keywords", m.keywords.join(", ")],
+                ["Preflight", `${m.preflight.manuscript} / ${m.preflight.cover}`],
+                ["Freigabe", m.ok ? "ja" : "nein"],
+              ];
+              for (const [key, value] of rows) console.log(`| ${key} | ${value} |`);
+            '
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Schritt 5: Veröffentlichung. Läuft nur, wenn ein Token hinterlegt ist und
+      # der Lauf nicht ausdrücklich ohne Deploy gestartet wurde. Ohne Token wird
+      # nichts veröffentlicht – es gibt keinen stillen Fallback.
+      - name: Deploy to Gumroad
+        if: env.GUMROAD_TOKEN != '' && inputs.skip_deploy != true
+        env:
+          INPUT_PRICE: ${{ inputs.price_cents }}
+        run: |
+          node scripts/deploy_digital.mjs \
+            --manifest artifacts/manifest.json \
+            ${INPUT_PRICE:+--price-cents "$INPUT_PRICE"} \
+            | tee artifacts/deploy.json
+
+      - name: Report deploy status
+        if: env.GUMROAD_TOKEN == '' || inputs.skip_deploy == true
+        run: |
+          echo "### Deploy übersprungen" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Kein \`GUMROAD_TOKEN\` hinterlegt oder \`skip_deploy\` gesetzt – das KDP-Paket liegt nur als Artefakt vor." >> "$GITHUB_STEP_SUMMARY"
+          node scripts/deploy_digital.mjs --manifest artifacts/manifest.json --dry-run >/dev/null
+
+      - name: Upload production package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publishing-package-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Fail if package was rejected
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            const file = "artifacts/manifest.json";
+            if (!fs.existsSync(file)) { console.error("Kein Manifest erzeugt."); process.exit(1); }
+            const m = JSON.parse(fs.readFileSync(file, "utf8"));
+            if (!m.ok) { console.error("Paket nicht freigabefähig: " + JSON.stringify(m.compliance)); process.exit(2); }
+            console.log("Paket freigegeben.");
+          '
