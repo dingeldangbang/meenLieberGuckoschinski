@@ -12,6 +12,7 @@
     "start": "node server/index.mjs",
     "dev": "node --watch server/index.mjs",
     "test": "node --test \"tests/**/*.test.mjs\"",
+    "verify": "node scripts/verify.mjs",
     "build:book": "node bin/buchmaschine.mjs build",
     "preflight": "node bin/buchmaschine.mjs preflight",
     "pipeline:harvest": "node scripts/harvest_keywords.mjs --out artifacts/metadata.json",
