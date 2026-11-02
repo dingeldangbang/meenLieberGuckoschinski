@@ -236,7 +236,7 @@ function coverSvg(preview, { guides = false, big = false } = {}) {
       <line x1="${spineX}" y1="0" x2="${spineX}" y2="${H}" stroke="#5aa0e0" stroke-width="0.01" stroke-dasharray="0.05 0.04"/>
       <line x1="${spineX + spine}" y1="0" x2="${spineX + spine}" y2="${H}" stroke="#5aa0e0" stroke-width="0.01" stroke-dasharray="0.05 0.04"/>
       <rect x="${bleed + safe}" y="${bleed + safe}" width="${W - (bleed + safe) * 2}" height="${trimH - safe * 2}" fill="none" stroke="#93c5a3" stroke-width="0.008" stroke-dasharray="0.05 0.04"/>
-      <rect x="${cover.barcode.leftIn}" y="${bleed + 0.25}" width="${cover.barcode.widthIn}" height="${cover.barcode.heightIn}" fill="none" stroke="#e05c69" stroke-width="0.012"/>`
+      <rect x="${cover.barcode.leftIn}" y="${cover.barcode.bottomIn}" width="${cover.barcode.widthIn}" height="${cover.barcode.heightIn}" fill="none" stroke="#e05c69" stroke-width="0.012"/>`
     : '';
 
   return `
@@ -256,11 +256,11 @@ function coverSvg(preview, { guides = false, big = false } = {}) {
       <ul style="margin:0;padding-left:0.28em;list-style:disc">${bullets}</ul>
     </div>
   </foreignObject>
-  <rect x="${cover.barcode.leftIn}" y="${bleed + 0.25}" width="${cover.barcode.widthIn}" height="${cover.barcode.heightIn}" fill="#ffffff"/>
-  <text x="${cover.barcode.leftIn + 0.1}" y="${bleed + 0.25 + cover.barcode.heightIn / 2 + 0.04}" fill="#9a9a9a" font-size="0.09" font-family="Helvetica, Arial, sans-serif">ISBN / Barcode</text>
+  <rect x="${cover.barcode.leftIn}" y="${cover.barcode.bottomIn}" width="${cover.barcode.widthIn}" height="${cover.barcode.heightIn}" fill="#ffffff"/>
+  <text x="${cover.barcode.leftIn + 0.1}" y="${cover.barcode.bottomIn + cover.barcode.heightIn / 2 + 0.04}" fill="#9a9a9a" font-size="0.09" font-family="Helvetica, Arial, sans-serif">ISBN / Barcode</text>
 
   <!-- Rücken -->
-  ${spine >= 0.17 ? `<text transform="translate(${spineX + spine * 0.72}, ${H / 2}) rotate(90)" text-anchor="middle" fill="${style.text}" font-size="0.11" font-family="Helvetica, Arial, sans-serif" font-weight="700" letter-spacing="0.02">${escapeXml(spineLabel)}</text>` : ''}
+  ${cover.spineTextAllowed ? `<text transform="translate(${spineX + spine * 0.72}, ${H / 2}) rotate(90)" text-anchor="middle" fill="${style.text}" font-size="0.11" font-family="Helvetica, Arial, sans-serif" font-weight="700" letter-spacing="0.02">${escapeXml(spineLabel)}</text>` : ''}
 
   <!-- Vorderseite -->
   <text x="${frontX + safe}" y="${bleed + trimH - safe - 0.12}" fill="${style.sub}" font-size="0.085" font-family="Helvetica, Arial, sans-serif" letter-spacing="0.03">${escapeXml(preview.coverBadge ?? '')}</text>

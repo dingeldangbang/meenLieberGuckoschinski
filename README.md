@@ -199,6 +199,9 @@ für die Frage „welche Version habe ich veröffentlicht?“.
 | GET/POST | `/api/projects` | Projekte listen / speichern (lokal, `data/projects.json`) |
 | DELETE | `/api/projects/:id` | Projekt löschen |
 | GET | `/api/dashboard?sales=10` | Portfolio-Auswertung: Tantiemen, Summen, Warnungen |
+| GET | `/api/bsr?rank=100000&category=books&pages=134` | Absatz- und Umsatzschätzung aus dem Bestseller-Rang (Potenzmodell) |
+| GET | `/api/bsr/reverse?sales=5` | Umkehrung: welcher Rang entspricht 5 Verkäufen pro Tag? |
+| GET | `/api/suggest/expand?q=sudoku&mkt=de` | A–Z-Expansion der Live-Suche (8 Wellen parallel, 8 s Zeitbudget, Offline-Fallback) |
 
 Konfigurationsobjekt (`config`), alle Felder optional außer `title` und `author`:
 

@@ -12,7 +12,8 @@ import { composeBook, summarizePlan } from './lib/compose.mjs';
 import { renderManuscriptPdf } from './lib/pdf/manuscript.mjs';
 import { renderCoverPdf, COVER_STYLES } from './lib/pdf/cover.mjs';
 import { buildEpub } from './lib/epub.mjs';
-import { keywordResearch } from './lib/suggest.mjs';
+import { expandAlphabet, keywordResearch } from './lib/suggest.mjs';
+import { CATEGORIES, estimateFromRank, rankForSales } from './lib/bsr.mjs';
 import { buildPortfolio } from './lib/portfolio.mjs';
 import { listProjects, saveProject, deleteProject } from './lib/store.mjs';
 import { preflightPdf } from './lib/preflight.mjs';
@@ -279,6 +280,47 @@ async function handleApi(req, res, url) {
     }
     const result = await keywordResearch(query, { marketplace });
     return sendJson(res, 200, result);
+  }
+
+  if (pathname === '/api/suggest/expand' && req.method === 'GET') {
+    const query = String(url.searchParams.get('q') ?? '').slice(0, 60);
+    const requested = url.searchParams.get('mkt') ?? 'de';
+    const marketplace = requested === 'uk' ? 'co.uk' : ['de', 'com', 'co.uk'].includes(requested) ? requested : 'de';
+    return sendJson(res, 200, await expandAlphabet(query, { marketplace }));
+  }
+
+  if (pathname === '/api/bsr' && req.method === 'GET') {
+    const rank = Number(url.searchParams.get('rank') ?? 0);
+    if (!Number.isFinite(rank) || rank < 1) {
+      return sendJson(res, 400, { error: 'Parameter rank muss eine positive Zahl sein.', categories: Object.keys(CATEGORIES) });
+    }
+    const category = url.searchParams.get('category') ?? 'books';
+    if (!CATEGORIES[category]) {
+      return sendJson(res, 400, { error: `Unbekannte Kategorie: ${category}`, categories: Object.keys(CATEGORIES) });
+    }
+    return sendJson(res, 200, {
+      categories: CATEGORIES,
+      estimate: estimateFromRank({
+        rank,
+        category,
+        price: Number(url.searchParams.get('price') ?? 9.99),
+        pageCount: Number(url.searchParams.get('pages') ?? 134),
+        trim: url.searchParams.get('trim') ?? '6x9',
+        marketplace: ['de', 'com', 'uk'].includes(url.searchParams.get('mkt') ?? '') ? url.searchParams.get('mkt') : 'de',
+      }),
+    });
+  }
+
+  if (pathname === '/api/bsr/reverse' && req.method === 'GET') {
+    const target = Number(url.searchParams.get('sales') ?? 0);
+    const category = url.searchParams.get('category') ?? 'books';
+    if (!Number.isFinite(target) || target <= 0) {
+      return sendJson(res, 400, { error: 'Parameter sales muss positiv sein.' });
+    }
+    if (!CATEGORIES[category]) {
+      return sendJson(res, 400, { error: `Unbekannte Kategorie: ${category}`, categories: Object.keys(CATEGORIES) });
+    }
+    return sendJson(res, 200, { salesPerDay: target, category, rank: rankForSales(target, { category }) });
   }
 
   if (pathname === '/api/pricing' && req.method === 'GET') {

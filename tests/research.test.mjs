@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { keywordResearch, parseSuggestions, scoreSuggestion, clearSuggestCache } from '../server/lib/suggest.mjs';
+import { expandAlphabet, keywordResearch, parseSuggestions, scoreSuggestion, clearSuggestCache } from '../server/lib/suggest.mjs';
 import { buildPortfolio } from '../server/lib/portfolio.mjs';
 
 /* --------------------------- Amazon Suggest ------------------------------ */
@@ -130,4 +130,49 @@ test('Portfolio zählt Buch-Typen und Formate', () => {
   assert.equal(summary.byGenerator.sudoku, 2);
   assert.equal(summary.byGenerator.notebook, 1);
   assert.equal(summary.byTrim['6x9'], 2);
+});
+
+/* --------------------------- A–Z-Expansion ------------------------------- */
+
+test('A–Z-Expansion sammelt Treffer je Buchstabe ohne Duplikate', async () => {
+  clearSuggestCache();
+  const seen = [];
+  const fakeFetch = async (url) => {
+    seen.push(url);
+    const letter = decodeURIComponent(new URL(url).searchParams.get('q')).split(' ').pop();
+    return { ok: true, json: async () => ['stamm', [`sudoku ${letter} leicht`, 'sudoku leicht'], [], [], {}] };
+  };
+  const result = await expandAlphabet('sudoku', { letters: ['a', 'b', 'c'], fetchImpl: fakeFetch });
+  assert.equal(result.source, 'amazon-suggest');
+  assert.equal(seen.length, 3);
+  assert.deepEqual(Object.keys(result.byLetter), ['a', 'b', 'c']);
+  assert.equal(result.lettersAnswered, 3);
+  assert.equal(result.lettersSkipped, 0);
+  assert.equal(result.expanded.filter((idea) => idea.term === 'sudoku leicht').length, 1);
+  assert.ok(result.expanded.every((idea) => typeof idea.score === 'number'));
+});
+
+test('A–Z-Expansion fällt bei Netzausfall auf die Offline-Werkstatt zurück', async () => {
+  clearSuggestCache();
+  const failing = async () => {
+    throw new Error('ECONNREFUSED');
+  };
+  const result = await expandAlphabet('rätselbuch', { letters: ['a', 'b'], fetchImpl: failing });
+  assert.equal(result.live, false);
+  assert.equal(result.source, 'amazon-error');
+  assert.ok(result.expanded.length > 0);
+  assert.match(result.note, /Offline-Werkstatt/);
+  assert.equal(result.lettersAnswered, 2);
+});
+
+test('A–Z-Expansion schickt zu kurze Stämme nicht ins Netz', async () => {
+  let called = false;
+  const spy = async () => {
+    called = true;
+    return { ok: true, json: async () => ['x', ['treffer']] };
+  };
+  const result = await expandAlphabet('a', { fetchImpl: spy });
+  assert.equal(called, false);
+  assert.equal(result.source, 'invalid');
+  assert.deepEqual(result.expanded, []);
 });

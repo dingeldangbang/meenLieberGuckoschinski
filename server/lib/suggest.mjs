@@ -41,7 +41,7 @@ export function scoreSuggestion(term, index) {
   };
 }
 
-export async function fetchAmazonSuggestions(prefix, { marketplace = 'de', timeoutMs = 4000, fetchImpl = fetch } = {}) {
+export async function fetchAmazonSuggestions(prefix, { marketplace = 'de', timeoutMs = 4000, fetchImpl = fetch, throttle = true } = {}) {
   const host = MARKETPLACES[marketplace];
   const query = String(prefix ?? '').trim();
   if (!host || query.length < 2) return { source: 'invalid', suggestions: [] };
@@ -52,9 +52,11 @@ export async function fetchAmazonSuggestions(prefix, { marketplace = 'de', timeo
     return { source: 'amazon-suggest', suggestions: cached.suggestions, cached: true };
   }
 
-  const wait = lastCallAt + MIN_INTERVAL_MS - Date.now();
-  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-  lastCallAt = Date.now();
+  if (throttle) {
+    const wait = lastCallAt + MIN_INTERVAL_MS - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastCallAt = Date.now();
+  }
 
   const url = `https://${host}/search/complete?method=completion&mkt=1&client=amazon-search-ui&search-alias=stripbooks&q=${encodeURIComponent(query)}`;
   const controller = new AbortController();
@@ -112,6 +114,86 @@ export async function keywordResearch(seed, { marketplace = 'de', fetchImpl } = 
         : 'Keine Live-Treffer – Vorschläge aus der Offline-Werkstatt.',
     ideas: offline,
     suggestions: [],
+  };
+}
+
+const ALPHABET = [...'abcdefghijklmnopqrstuvwxyz'];
+
+/**
+ * A–Z-Expansion: hängt jeden Buchstaben an den Stamm und sammelt die Vorschläge.
+ *
+ * 26 Anfragen laufen in kleinen Wellen (Standard: 8 gleichzeitig, 2 s Timeout),
+ * damit die Route nicht minutenlang hängt. Ist Amazon nicht erreichbar, greift
+ * nach dem Zeitbudget die Offline-Werkstatt.
+ * @param {string} prefix
+ * @param {{marketplace?:string, fetchImpl?:Function, letters?:string[], maxTerms?:number, timeoutMs?:number, budgetMs?:number}} options
+ */
+export async function expandAlphabet(prefix, options = {}) {
+  const base = String(prefix ?? '').trim();
+  const letters = options.letters ?? ALPHABET;
+  const maxTerms = options.maxTerms ?? 120;
+  const timeoutMs = options.timeoutMs ?? 2000;
+  const budgetMs = options.budgetMs ?? 8000;
+  const waveSize = 8;
+  if (base.length < 2) {
+    return { source: 'invalid', live: false, expanded: [], byLetter: {}, note: 'Mindestens zwei Zeichen als Stamm eingeben.' };
+  }
+
+  const startedAt = Date.now();
+  const byLetter = {};
+  const seen = new Set();
+  let liveLetters = 0;
+  let answered = 0;
+
+  for (let index = 0; index < letters.length; index += waveSize) {
+    if (Date.now() - startedAt > budgetMs) break;
+    const wave = letters.slice(index, index + waveSize);
+    const results = await Promise.all(
+      wave.map(async (letter) => [
+        letter,
+        await fetchAmazonSuggestions(`${base} ${letter}`, {
+          marketplace: options.marketplace ?? 'de',
+          fetchImpl: options.fetchImpl,
+          timeoutMs,
+          throttle: false,
+        }),
+      ]),
+    );
+    for (const [letter, result] of results) {
+      answered += 1;
+      const terms = result.suggestions ?? [];
+      byLetter[letter] = terms;
+      if (terms.length) liveLetters += 1;
+      for (const term of terms) {
+        if (seen.size >= maxTerms) break;
+        seen.add(term);
+      }
+    }
+  }
+
+  const expanded = [...seen];
+  const skipped = letters.length - answered;
+  if (!expanded.length) {
+    return {
+      source: 'amazon-error',
+      live: false,
+      byLetter,
+      lettersAnswered: answered,
+      lettersSkipped: skipped,
+      expanded: buildKeywordIdeas(base, { limit: 24 }).map((idea) => idea.term),
+      note: `Keine Live-Treffer für die A–Z-Expansion – Offline-Werkstatt als Ersatz (${answered} von ${letters.length} Buchstaben beantwortet).`,
+    };
+  }
+
+  return {
+    source: 'amazon-suggest',
+    live: true,
+    byLetter,
+    lettersWithHits: liveLetters,
+    lettersAnswered: answered,
+    lettersSkipped: skipped,
+    expanded: expanded.map((term, index) => scoreSuggestion(term, index)),
+    note: `${expanded.length} Suchphrasen aus ${liveLetters} von ${answered} beantworteten Buchstaben${skipped ? ` (${skipped} wegen Zeitbudget übersprungen)` : ''}. Nachfrage und Wettbewerb sind heuristisch geschätzt.`,
   };
 }
 
