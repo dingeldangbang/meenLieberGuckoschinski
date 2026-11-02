@@ -1,0 +1,194 @@
+name: Publishing Pipeline
+
+# Takt: Dienstag und Freitag, 04:00 UTC.
+#
+# Warum nicht `0 4 */2 * *` ("jeden 2. Tag")? Cron zählt bei `*/2` die Tage im
+# Monat, nicht einen 48-Stunden-Takt: Am 31. und am 1. laufen zwei Jobs direkt
+# hintereinander, danach folgt eine Pause von bis zu drei Tagen. Zwei feste
+# Wochentage sind vorhersagbar, laufen nie doppelt und bleiben weit unter jeder
+# Plattform-Drosselung.
+#
+# Achtung, echter Stolperstein: In einem ÖFFENTLICHEN Repository schaltet GitHub
+# geplante Workflows nach 60 Tagen ohne Repository-Aktivität stillschweigend ab.
+# Dieses Repository ist öffentlich. Abhilfe: regelmäßig committen, den Workflow
+# im Actions-Tab wieder aktivieren (`gh workflow enable`) oder extern per
+# `workflow_dispatch` anstoßen.
+on:
+  schedule:
+    - cron: '0 4 * * 2,5'
+  workflow_dispatch:
+    inputs:
+      niche:
+        description: 'Nischen-ID (leer = automatisch aus dem Datum)'
+        required: false
+        type: string
+      skip_deploy:
+        description: 'Nur bauen, nicht veröffentlichen'
+        required: false
+        type: boolean
+        default: false
+      price_cents:
+        description: 'Preis in Cent (leer = aus dem Manifest)'
+        required: false
+        type: string
+
+concurrency:
+  group: publishing-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-verify-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Secrets sind in `if`-Bedingungen nicht verfügbar, als Job-Env schon.
+      GUMROAD_TOKEN: ${{ secrets.GUMROAD_TOKEN }}
+      # ISBN gehört dem Verlag und wird nie erzeugt: siehe scripts/lib/isbn.mjs.
+      BOOK_ISBN: ${{ secrets.BOOK_ISBN }}
+      PUBLISHER_NAME: ${{ secrets.PUBLISHER_NAME }}
+      DNB_HOTFOLDER: ${{ secrets.DNB_HOTFOLDER }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (Regressionsschutz vor dem Bau)
+        run: npm test
+
+      # Schritt 1: Ingestion. Fällt Amazon aus, entstehen die Slots aus den
+      # kuratierten Nischen-Paketen – der Lauf scheitert deshalb nicht.
+      - name: Harvest niche and keywords
+        id: harvest
+        run: |
+          node scripts/harvest_keywords.mjs \
+            --date "$(date -u +%F)" \
+            ${INPUT_NICHE:+--niche "$INPUT_NICHE"} \
+            --out artifacts/metadata.json
+        env:
+          INPUT_NICHE: ${{ inputs.niche }}
+
+      # Schritt 2+3: Buchblock bauen, Parität erzwingen (Vakatseite), Cover mit
+      # der korrigierten Seitenzahl rendern, Gate 2 und Preflight ausführen.
+      - name: Build package (interior, parity gate, cover, preflight)
+        run: |
+          node scripts/build_package.mjs --config artifacts/metadata.json --out artifacts
+
+      # Schritt 4: Unabhängige Nachprüfung der Bytes, wie sie auf der Platte
+      # liegen. Exit 1 bei Cover-Drift über 1 pt oder verletzter Parität.
+      - name: Quality gate on written artifacts
+        run: node scripts/preflight_checker.mjs --all artifacts/manifest.json
+
+      # Schritt 5: ONIX 3.0 für den Buchhandel – nur mit gültiger, eigener ISBN.
+      # Ohne ISBN wird der Schritt übersprungen, nichts wird erfunden.
+      - name: Generate ONIX 3.0 metadata
+        if: env.BOOK_ISBN != ''
+        run: |
+          node scripts/onix.mjs \
+            --manifest artifacts/manifest.json \
+            --isbn "$BOOK_ISBN" \
+            --publisher "${PUBLISHER_NAME:-Selbstverlag}" \
+            --out artifacts/onix3.xml
+
+      # Schritt 5b: Ergebnis gegen das offizielle ONIX-3.0-XSD prüfen.
+      # Das Schema wird gepinnt aus dem EDItEUR-Spiegel geholt (nicht
+      # versioniert), xmllint ist auf den Runnern vorhanden. Ohne gültiges
+      # Schema bricht der Lauf ab – eine ungeprüfte Datei ginge sonst an den
+      # Buchhandel.
+      - name: Validate ONIX against official XSD
+        if: env.BOOK_ISBN != ''
+        run: |
+          if ! command -v xmllint >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libxml2-utils
+          fi
+          node scripts/validate_onix.mjs \
+            --file artifacts/onix3.xml \
+            --schema-dir .onix-schema
+
+      # Schritt 6: Pflichtablieferung nach § 14 DNBG vorbereiten. Es gibt keine
+      # öffentliche DNB-API; erzeugt wird das Transferpaket, die Ablage im
+      # gemounteten Hotfolder erfolgt nur, wenn DNB_HOTFOLDER gesetzt ist.
+      - name: Build DNB legal deposit package
+        run: |
+          node scripts/legal_deposit.mjs \
+            --manifest artifacts/manifest.json \
+            --out artifacts/dnb \
+            --publisher "${PUBLISHER_NAME:-Selbstverlag}" \
+            ${BOOK_ISBN:+--isbn "$BOOK_ISBN"} \
+            ${DNB_HOTFOLDER:+--hotfolder "$DNB_HOTFOLDER"}
+
+      - name: Show manifest summary
+        run: |
+          {
+            echo "### Publishing-Pipeline"
+            echo ""
+            echo "| Feld | Wert |"
+            echo "| --- | --- |"
+            node -e '
+              const m = require("./artifacts/manifest.json");
+              const rows = [
+                ["Titel", m.title],
+                ["Seiten", `${m.pageCount}${m.parityRepaired ? " (Vakatseite ergänzt)" : ""}`],
+                ["Cover", `${m.geometry.widthIn} × ${m.geometry.heightIn} in`],
+                ["Rücken", `${m.geometry.spineIn} in`],
+                ["Keywords", m.keywords.join(", ")],
+                ["Preflight", `${m.preflight.manuscript} / ${m.preflight.cover}`],
+                ["Freigabe", m.ok ? "ja" : "nein"],
+              ];
+              for (const [key, value] of rows) console.log(`| ${key} | ${value} |`);
+            '
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Schritt 7: Veröffentlichung. Läuft nur, wenn ein Token hinterlegt ist und
+      # der Lauf nicht ausdrücklich ohne Deploy gestartet wurde. Ohne Token wird
+      # nichts veröffentlicht – es gibt keinen stillen Fallback.
+      - name: Deploy to Gumroad
+        if: env.GUMROAD_TOKEN != '' && inputs.skip_deploy != true
+        env:
+          INPUT_PRICE: ${{ inputs.price_cents }}
+        run: |
+          node scripts/deploy_digital.mjs \
+            --manifest artifacts/manifest.json \
+            ${INPUT_PRICE:+--price-cents "$INPUT_PRICE"} \
+            | tee artifacts/deploy.json
+
+      - name: Report deploy status
+        if: env.GUMROAD_TOKEN == '' || inputs.skip_deploy == true
+        run: |
+          echo "### Deploy übersprungen" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Kein \`GUMROAD_TOKEN\` hinterlegt oder \`skip_deploy\` gesetzt – das KDP-Paket liegt nur als Artefakt vor." >> "$GITHUB_STEP_SUMMARY"
+          node scripts/deploy_digital.mjs --manifest artifacts/manifest.json --dry-run >/dev/null
+
+      - name: Upload production package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publishing-package-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Fail if package was rejected
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            const file = "artifacts/manifest.json";
+            if (!fs.existsSync(file)) { console.error("Kein Manifest erzeugt."); process.exit(1); }
+            const m = JSON.parse(fs.readFileSync(file, "utf8"));
+            if (!m.ok) { console.error("Paket nicht freigabefähig: " + JSON.stringify(m.compliance)); process.exit(2); }
+            console.log("Paket freigegeben.");
+          '
